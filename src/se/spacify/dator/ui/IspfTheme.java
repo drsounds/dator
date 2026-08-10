@@ -48,13 +48,11 @@ final class IspfTheme {
 
         String[] brightKeys = {
                 "twindow.border", "twindow.background", "twindow.border.modal",
-                "tbutton.mnemonic", "tbutton.mnemonic.pulse", "tbutton.pulse",
-                "tlabel.mnemonic", "tfield.pulse", "tcheckbox.mnemonic",
-                "tcheckbox.pulse", "tcalendar.arrow", "tcalendar.title",
-                "tradiobutton.mnemonic", "tradiobutton.pulse", "tradiogroup.active",
-                "tmenu.mnemonic", "tscroller.bar", "ttreeview.expandbutton",
-                "tstatusbar.button", "teditor.margin", "ttable.active", "ttable.label",
-                "thelpwindow.border", "thelpwindow.link",
+                "tbutton.mnemonic", "tlabel.mnemonic", "tcheckbox.mnemonic",
+                "tcalendar.arrow", "tcalendar.title", "tradiobutton.mnemonic",
+                "tradiogroup.active", "tmenu.mnemonic", "tscroller.bar",
+                "ttreeview.expandbutton", "tstatusbar.button", "teditor.margin",
+                "ttable.active", "ttable.label", "thelpwindow.border", "thelpwindow.link",
         };
         for (String key : brightKeys) {
             theme.setColor(key, new CellAttributes(bright));
@@ -70,6 +68,12 @@ final class IspfTheme {
                 "ttreeview.selected", "tlist.selected", "tstatusbar.selected",
                 "teditor.selected", "ttable.selected", "ttable.label.selected",
                 "thelpwindow.windowmove", "thelpwindow.link.active",
+                // TField/TButton/TCheckBox/TRadioButton unconditionally fade their
+                // focused-state text toward these "*.pulse" colors on every frame.
+                // Pointing them at the same color as the focused state itself turns
+                // that fade into a no-op instead of a visible blink.
+                "tfield.pulse", "tbutton.pulse", "tbutton.mnemonic.pulse",
+                "tcheckbox.pulse", "tradiobutton.pulse",
         };
         for (String key : highlightKeys) {
             theme.setColor(key, new CellAttributes(highlight));
