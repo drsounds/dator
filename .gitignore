@@ -1,0 +1,15 @@
+# Compiled output
+bin/
+*.class
+
+# Runtime SQLite databases
+*.sqlite
+*.sqlite3
+*.db
+
+# Build scratch files
+sources.txt
+
+# OS/editor junk
+Thumbs.db
+.DS_Store
