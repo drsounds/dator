@@ -51,7 +51,7 @@ public class DatorApplication extends TApplication {
         if (PreferencesStore.THEME_DEFAULT.equals(preferences.theme)) {
             getTheme().setDefaultTheme();
         } else if (PreferencesStore.THEME_DOS.equals(preferences.theme)) {
-            MsDosTheme.apply(getTheme());
+            MsDosTheme.apply(getTheme(), preferences.dosDarkButtons);
         } else {
             IspfTheme.apply(getTheme(), ColorNames.colorOf(preferences.ispfForeground),
                     ColorNames.colorOf(preferences.ispfBackground));

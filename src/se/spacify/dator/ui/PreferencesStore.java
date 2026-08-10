@@ -24,6 +24,8 @@ class PreferencesStore {
     String ispfBackground = "BLACK";
     /** Flat mainframe look: no window shadows, no transparency, no desktop hatch pattern. */
     boolean flatUi = true;
+    /** MS-DOS theme button face: true = dark grey (default), false = white. */
+    boolean dosDarkButtons = true;
 
     private static File file() {
         String home = System.getProperty("user.home", ".");
@@ -41,6 +43,8 @@ class PreferencesStore {
                 p.ispfForeground = props.getProperty("ispf.foreground", p.ispfForeground);
                 p.ispfBackground = props.getProperty("ispf.background", p.ispfBackground);
                 p.flatUi = Boolean.parseBoolean(props.getProperty("flatUi", String.valueOf(p.flatUi)));
+                p.dosDarkButtons = Boolean.parseBoolean(
+                        props.getProperty("dos.darkButtons", String.valueOf(p.dosDarkButtons)));
             } catch (IOException ignored) {
                 // fall back to defaults
             }
@@ -59,6 +63,7 @@ class PreferencesStore {
         props.setProperty("ispf.foreground", ispfForeground);
         props.setProperty("ispf.background", ispfBackground);
         props.setProperty("flatUi", String.valueOf(flatUi));
+        props.setProperty("dos.darkButtons", String.valueOf(dosDarkButtons));
         try (OutputStream out = new FileOutputStream(f)) {
             props.store(out, "Dator preferences");
         } catch (IOException ignored) {

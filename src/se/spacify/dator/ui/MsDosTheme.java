@@ -6,10 +6,16 @@ import jexer.bits.ColorTheme;
 
 /**
  * Classic MS-DOS / Turbo Vision look: a blue desktop, grey (WHITE,
- * non-bold) window surfaces and buttons, cyan input fields and selection
- * highlights, and red mnemonic (hotkey) letters.
+ * non-bold) window surfaces, cyan input fields and selection highlights,
+ * red mnemonic (hotkey) letters, and a dark-grey or white button face
+ * (user's choice, dark grey by default).
  */
 final class MsDosTheme {
+
+    /** Jexer's own "bright black" RGB - a true dark grey, distinct from the WHITE surface. */
+    static final int DARK_GRAY_RGB = 0x545454;
+    /** Jexer's own "bright white" RGB - a true white, distinct from the WHITE (light grey) surface. */
+    static final int WHITE_RGB = 0xfcfcfc;
 
     private MsDosTheme() {
     }
@@ -22,7 +28,28 @@ final class MsDosTheme {
         return c;
     }
 
+    private static CellAttributes attrRgbBack(Color fore, int backRgb, boolean bold) {
+        CellAttributes c = new CellAttributes();
+        c.setForeColor(fore);
+        c.setBackColorRGB(backRgb);
+        c.setBold(bold);
+        return c;
+    }
+
+    private static CellAttributes attrRgb(int foreRgb, int backRgb, boolean bold) {
+        CellAttributes c = new CellAttributes();
+        c.setForeColorRGB(foreRgb);
+        c.setBackColorRGB(backRgb);
+        c.setBold(bold);
+        return c;
+    }
+
     static void apply(ColorTheme theme) {
+        apply(theme, true);
+    }
+
+    /** @param darkButtons true for a dark-grey button face, false for white. */
+    static void apply(ColorTheme theme, boolean darkButtons) {
         // Window frame sits in the blue desktop area.
         CellAttributes windowBorder = attr(Color.WHITE, Color.BLUE, true);
         CellAttributes windowBorderInactive = attr(Color.CYAN, Color.BLUE, false);
@@ -38,8 +65,13 @@ final class MsDosTheme {
         CellAttributes field = attr(Color.BLACK, Color.CYAN, false);
         CellAttributes fieldFocus = attr(Color.WHITE, Color.BLUE, true);
 
-        // Grey buttons, cyan when focused.
-        CellAttributes button = attr(Color.BLACK, Color.WHITE, false);
+        // Button face: dark grey or true white (user's choice), cyan when focused.
+        CellAttributes button = darkButtons
+                ? attrRgb(WHITE_RGB, DARK_GRAY_RGB, true)
+                : attrRgb(0x000000, WHITE_RGB, false);
+        CellAttributes buttonMnemonic = darkButtons
+                ? attrRgbBack(Color.RED, DARK_GRAY_RGB, true)
+                : attrRgbBack(Color.RED, WHITE_RGB, true);
         CellAttributes buttonFocus = attr(Color.BLACK, Color.CYAN, true);
 
         // Red hotkey letters, as in classic Turbo Vision.
@@ -84,8 +116,9 @@ final class MsDosTheme {
 
         set(theme, button, "tbutton.inactive", "tbutton.disabled");
         set(theme, buttonFocus, "tbutton.active", "tbutton.pulse");
+        set(theme, buttonMnemonic, "tbutton.mnemonic");
 
-        set(theme, mnemonic, "tbutton.mnemonic", "tlabel.mnemonic", "tcheckbox.mnemonic",
+        set(theme, mnemonic, "tlabel.mnemonic", "tcheckbox.mnemonic",
                 "tradiobutton.mnemonic", "tmenu.mnemonic", "tstatusbar.button");
         set(theme, mnemonicFocus, "tbutton.mnemonic.highlighted", "tbutton.mnemonic.pulse",
                 "tcheckbox.mnemonic.highlighted", "tradiobutton.mnemonic.highlighted");
