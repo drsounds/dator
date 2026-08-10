@@ -45,20 +45,29 @@ final class MsDosTheme {
     }
 
     static void apply(ColorTheme theme) {
-        apply(theme, true);
+        apply(theme, true, false);
     }
 
-    /** @param darkButtons true for a dark-grey button face, false for white. */
-    static void apply(ColorTheme theme, boolean darkButtons) {
-        // Window frame sits in the blue desktop area.
-        CellAttributes windowBorder = attr(Color.WHITE, Color.BLUE, true);
-        CellAttributes windowBorderInactive = attr(Color.CYAN, Color.BLUE, false);
+    /**
+     * @param darkButtons true for a dark-grey button face, false for white
+     * @param whiteFrame true for a white-on-blue window frame (the classic
+     *     bordered look); false (default) blends the frame into the surface
+     */
+    static void apply(ColorTheme theme, boolean darkButtons, boolean whiteFrame) {
         CellAttributes desktop = attr(Color.WHITE, Color.BLUE, false);
 
         // Light grey window body ("surface"): plain WHITE reads as light
         // grey against a true-color background, matching classic DOS UIs.
         CellAttributes surface = attr(Color.BLACK, Color.WHITE, false);
         CellAttributes surfaceAccent = attr(Color.BLUE, Color.WHITE, true);
+
+        // Window frame: by default it blends into the surface (same
+        // black-on-light-grey); optionally a classic white-on-blue border
+        // that pops against the desktop instead.
+        CellAttributes windowBorder = whiteFrame
+                ? attr(Color.WHITE, Color.BLUE, true) : new CellAttributes(surface);
+        CellAttributes windowBorderInactive = whiteFrame
+                ? attr(Color.CYAN, Color.BLUE, false) : new CellAttributes(surface);
 
         // Editable widgets get a distinct cyan face; focus pops with a
         // strong blue/white reverse.

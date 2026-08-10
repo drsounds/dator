@@ -25,15 +25,21 @@ public class PreferencesWindow extends TWindow {
     private static final String WHITE_OPTION = "White";
     private static final List<String> BUTTON_OPTIONS = List.of(DARK_GRAY_OPTION, WHITE_OPTION);
 
+    private static final String FRAME_SURFACE_OPTION = "Match surface";
+    private static final String FRAME_WHITE_OPTION = "White (on blue)";
+    private static final List<String> FRAME_OPTIONS = List.of(FRAME_SURFACE_OPTION, FRAME_WHITE_OPTION);
+
     private final DatorApplication app;
     private TComboBox themeCombo;
     private TComboBox dosButtonCombo;
+    private TComboBox dosFrameCombo;
     private TComboBox fgCombo;
     private TComboBox bgCombo;
     private TCheckBox flatUiCheckBox;
+    private TCheckBox dosFrameLinesCheckBox;
 
     public PreferencesWindow(DatorApplication app) {
-        super(app, "Preferences", 60, 22, TWindow.MODAL);
+        super(app, "Preferences", 60, 25, TWindow.MODAL);
         this.app = app;
         setupWidgets();
     }
@@ -56,17 +62,24 @@ public class PreferencesWindow extends TWindow {
         int dosButtonIndex = prefs.dosDarkButtons ? 0 : 1;
         dosButtonCombo = addComboBox(2, 5, 20, BUTTON_OPTIONS, dosButtonIndex, 3, null);
 
-        addLabel("ISPF foreground color", 2, 7);
+        addLabel("MS-DOS window frame color", 2, 7);
+        int dosFrameIndex = prefs.dosWhiteFrame ? 1 : 0;
+        dosFrameCombo = addComboBox(2, 8, 20, FRAME_OPTIONS, dosFrameIndex, 3, null);
+
+        dosFrameLinesCheckBox = addCheckBox(2, 10,
+                "MS-DOS: show window frame lines", prefs.dosShowFrameLines);
+
+        addLabel("ISPF foreground color", 2, 12);
         int fgIndex = Math.max(0, ColorNames.NAMES.indexOf(prefs.ispfForeground.toUpperCase(java.util.Locale.ROOT)));
-        fgCombo = addComboBox(2, 8, 20, ColorNames.NAMES, fgIndex, 8, null);
+        fgCombo = addComboBox(2, 13, 20, ColorNames.NAMES, fgIndex, 8, null);
 
-        addLabel("ISPF background color", 2, 10);
+        addLabel("ISPF background color", 2, 15);
         int bgIndex = Math.max(0, ColorNames.NAMES.indexOf(prefs.ispfBackground.toUpperCase(java.util.Locale.ROOT)));
-        bgCombo = addComboBox(2, 11, 20, ColorNames.NAMES, bgIndex, 8, null);
+        bgCombo = addComboBox(2, 16, 20, ColorNames.NAMES, bgIndex, 8, null);
 
-        addLabel("(each color setting above only applies to its own theme)", 2, 13);
+        addLabel("(each setting above only applies to its own theme)", 2, 18);
 
-        flatUiCheckBox = addCheckBox(2, 15,
+        flatUiCheckBox = addCheckBox(2, 20,
                 "Flat mainframe look (no shadows, transparency, or desktop pattern)", prefs.flatUi);
 
         addButton("Apply", 2, getHeight() - 3, new TAction() {
@@ -104,6 +117,8 @@ public class PreferencesWindow extends TWindow {
         prefs.ispfForeground = fgCombo.getText();
         prefs.ispfBackground = bgCombo.getText();
         prefs.dosDarkButtons = DARK_GRAY_OPTION.equals(dosButtonCombo.getText());
+        prefs.dosWhiteFrame = FRAME_WHITE_OPTION.equals(dosFrameCombo.getText());
+        prefs.dosShowFrameLines = dosFrameLinesCheckBox.isChecked();
         prefs.flatUi = flatUiCheckBox.isChecked();
         app.applyTheme();
         app.applyEffects();

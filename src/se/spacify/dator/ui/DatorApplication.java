@@ -51,7 +51,7 @@ public class DatorApplication extends TApplication {
         if (PreferencesStore.THEME_DEFAULT.equals(preferences.theme)) {
             getTheme().setDefaultTheme();
         } else if (PreferencesStore.THEME_DOS.equals(preferences.theme)) {
-            MsDosTheme.apply(getTheme(), preferences.dosDarkButtons);
+            MsDosTheme.apply(getTheme(), preferences.dosDarkButtons, preferences.dosWhiteFrame);
         } else {
             IspfTheme.apply(getTheme(), ColorNames.colorOf(preferences.ispfForeground),
                     ColorNames.colorOf(preferences.ispfBackground));
@@ -60,14 +60,52 @@ public class DatorApplication extends TApplication {
     }
 
     /**
-     * Applies the flat-UI preference: no window shadows, no translucent
-     * windows, and no hatch-patterned desktop background - just flat color
-     * fills, like a real mainframe terminal.
+     * Applies the flat-UI preference (no window shadows, no translucent
+     * windows) and desktop pattern / window-frame preferences. The MS-DOS
+     * theme's desktop is always a flat color fill - no hatch pattern -
+     * regardless of the flat-UI toggle, which only governs the other themes.
      */
     void applyEffects() {
         setTranslucence(!preferences.flatUi);
-        setDesktop(preferences.flatUi ? null : new jexer.TDesktop(this));
+
+        boolean isDos = PreferencesStore.THEME_DOS.equals(preferences.theme);
+        if (isDos) {
+            setDesktop(new PlainDesktop(this));
+        } else if (preferences.flatUi) {
+            setDesktop(null);
+        } else {
+            setDesktop(new jexer.TDesktop(this));
+        }
+
+        applyFrameLines(isDos && !preferences.dosShowFrameLines);
         doRepaint();
+    }
+
+    /**
+     * Toggles window frame visibility. Sets the system properties Jexer's
+     * TWindow reads at construction time (so new windows opened later in
+     * this session pick it up), and also updates every window already open.
+     */
+    private void applyFrameLines(boolean hidden) {
+        String style = hidden ? "none" : null;
+        String[] props = {
+                "jexer.TWindow.borderStyleForeground", "jexer.TWindow.borderStyleModal",
+                "jexer.TWindow.borderStyleInactive", "jexer.TWindow.borderStyleMoving",
+        };
+        for (String prop : props) {
+            if (style == null) {
+                System.clearProperty(prop);
+            } else {
+                System.setProperty(prop, style);
+            }
+        }
+        String restoreStyle = hidden ? "none" : "default";
+        for (jexer.TWindow w : getAllWindows()) {
+            w.setBorderStyleForeground(restoreStyle);
+            w.setBorderStyleModal(restoreStyle);
+            w.setBorderStyleInactive(restoreStyle);
+            w.setBorderStyleMoving(restoreStyle);
+        }
     }
 
     private void openDatabase(String path) throws SQLException {

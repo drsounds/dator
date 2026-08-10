@@ -26,6 +26,10 @@ class PreferencesStore {
     boolean flatUi = true;
     /** MS-DOS theme button face: true = dark grey (default), false = white. */
     boolean dosDarkButtons = true;
+    /** MS-DOS theme window frame: false (default) = matches the surface, true = white-on-blue. */
+    boolean dosWhiteFrame = false;
+    /** MS-DOS theme window frame lines: true (default) = shown, false = borderless windows. */
+    boolean dosShowFrameLines = true;
 
     private static File file() {
         String home = System.getProperty("user.home", ".");
@@ -45,6 +49,10 @@ class PreferencesStore {
                 p.flatUi = Boolean.parseBoolean(props.getProperty("flatUi", String.valueOf(p.flatUi)));
                 p.dosDarkButtons = Boolean.parseBoolean(
                         props.getProperty("dos.darkButtons", String.valueOf(p.dosDarkButtons)));
+                p.dosWhiteFrame = Boolean.parseBoolean(
+                        props.getProperty("dos.whiteFrame", String.valueOf(p.dosWhiteFrame)));
+                p.dosShowFrameLines = Boolean.parseBoolean(
+                        props.getProperty("dos.showFrameLines", String.valueOf(p.dosShowFrameLines)));
             } catch (IOException ignored) {
                 // fall back to defaults
             }
@@ -64,6 +72,8 @@ class PreferencesStore {
         props.setProperty("ispf.background", ispfBackground);
         props.setProperty("flatUi", String.valueOf(flatUi));
         props.setProperty("dos.darkButtons", String.valueOf(dosDarkButtons));
+        props.setProperty("dos.whiteFrame", String.valueOf(dosWhiteFrame));
+        props.setProperty("dos.showFrameLines", String.valueOf(dosShowFrameLines));
         try (OutputStream out = new FileOutputStream(f)) {
             props.store(out, "Dator preferences");
         } catch (IOException ignored) {
