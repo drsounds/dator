@@ -70,6 +70,11 @@ public class DataRowView extends TWindow {
             tabRelations.clear();
             inlineRelations.clear();
             for (DatorRelation r : app.getMetaRepository().listRelationsReferencing(table.getId())) {
+                if (r.getTableId() == table.getId()) {
+                    // Self-referencing parent_id "Children" relation, auto-wired on
+                    // every table: hidden here, it's rarely used and mostly empty.
+                    continue;
+                }
                 if (DatorRelation.DISPLAY_TABLE.equals(r.getDisplayMode())) {
                     inlineRelations.add(r);
                 } else {
