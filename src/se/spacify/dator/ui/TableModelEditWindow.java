@@ -110,12 +110,24 @@ public class TableModelEditWindow extends TWindow {
             }
         }
         if (rows.isEmpty()) {
-            ColRow r = new ColRow();
-            r.name = "id";
-            r.type = "INTEGER";
-            r.pk = "Y";
-            r.nullable = "N";
-            rows.add(r);
+            ColRow idRow = new ColRow();
+            idRow.name = "id";
+            idRow.type = "INTEGER";
+            idRow.pk = "Y";
+            idRow.nullable = "N";
+            rows.add(idRow);
+
+            // Preview the standard bookkeeping columns that will be added on save anyway.
+            for (DatorColumn std : MetaRepository.standardColumnDefs()) {
+                ColRow r = new ColRow();
+                r.name = std.getName();
+                r.type = std.getDataType();
+                r.pk = std.isPk() ? "Y" : "N";
+                r.nullable = std.isNullable() ? "Y" : "N";
+                r.unique = std.isUnique() ? "Y" : "N";
+                r.defaultValue = std.getDefaultValue() == null ? "" : std.getDefaultValue();
+                rows.add(r);
+            }
         }
         rebuildGrid();
     }

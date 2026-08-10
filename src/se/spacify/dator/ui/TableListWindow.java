@@ -23,14 +23,14 @@ public class TableListWindow extends TWindow {
     private List<DatorTable> tables = new ArrayList<>();
 
     public TableListWindow(DatorApplication app) {
-        super(app, "Table Models", 78, 22);
+        super(app, "Table Models", 96, 22);
         this.app = app;
         setupWidgets();
         reload();
     }
 
     private void setupWidgets() {
-        addLabel("Ins=New  F4=Edit  Enter/F7=Browse Data  F8=Relations  Del=Delete  F5=Refresh",
+        addLabel("Ins=New  F4=Edit  Enter/F7=Browse Data  F8=Relations  F9=Summaries  Del=Delete  F5=Refresh",
                 2, 1);
 
         addButton("New Model", 2, getHeight() - 4, new TAction() {
@@ -53,12 +53,17 @@ public class TableListWindow extends TWindow {
                 relationsSelected();
             }
         });
-        addButton("Delete", 57, getHeight() - 4, new TAction() {
+        addButton("Summaries", 57, getHeight() - 4, new TAction() {
+            public void DO() {
+                summariesSelected();
+            }
+        });
+        addButton("Delete", 71, getHeight() - 4, new TAction() {
             public void DO() {
                 deleteSelected();
             }
         });
-        addButton("Refresh", 67, getHeight() - 4, new TAction() {
+        addButton("Refresh", 81, getHeight() - 4, new TAction() {
             public void DO() {
                 reload();
             }
@@ -78,15 +83,17 @@ public class TableListWindow extends TWindow {
         }
 
         int rowCount = Math.max(tables.size(), 1);
-        grid = new TTableWidget(this, 1, 3, getWidth() - 4, getHeight() - 8, 4, rowCount);
+        grid = new TTableWidget(this, 1, 3, getWidth() - 4, getHeight() - 8, 5, rowCount);
         grid.setColumnLabel(0, "Name");
         grid.setColumnLabel(1, "Label");
         grid.setColumnLabel(2, "Columns");
         grid.setColumnLabel(3, "Relations");
+        grid.setColumnLabel(4, "Summaries");
         grid.setColumnWidth(0, 20);
         grid.setColumnWidth(1, 20);
         grid.setColumnWidth(2, 10);
         grid.setColumnWidth(3, 10);
+        grid.setColumnWidth(4, 11);
         grid.setHighlightRow(true);
 
         if (tables.isEmpty()) {
@@ -99,13 +106,15 @@ public class TableListWindow extends TWindow {
                 try {
                     grid.setCellText(2, i, String.valueOf(app.getMetaRepository().listColumns(t.getId()).size()));
                     grid.setCellText(3, i, String.valueOf(app.getMetaRepository().listRelations(t.getId()).size()));
+                    grid.setCellText(4, i, String.valueOf(app.getMetaRepository().listSummaries(t.getId()).size()));
                 } catch (Exception e) {
                     grid.setCellText(2, i, "?");
                     grid.setCellText(3, i, "?");
+                    grid.setCellText(4, i, "?");
                 }
             }
         }
-        for (int c = 0; c < 4; c++) {
+        for (int c = 0; c < 5; c++) {
             grid.setColumnReadOnly(c, true);
         }
         activate(grid);
@@ -150,6 +159,14 @@ public class TableListWindow extends TWindow {
         new RelationEditWindow(app, t);
     }
 
+    private void summariesSelected() {
+        DatorTable t = selectedTable();
+        if (t == null) {
+            return;
+        }
+        new SummaryEditWindow(app, t);
+    }
+
     private void deleteSelected() {
         DatorTable t = selectedTable();
         if (t == null) {
@@ -184,6 +201,9 @@ public class TableListWindow extends TWindow {
             return;
         } else if (key.equals(TKeypress.kbF8)) {
             relationsSelected();
+            return;
+        } else if (key.equals(TKeypress.kbF9)) {
+            summariesSelected();
             return;
         } else if (key.equals(TKeypress.kbDel)) {
             deleteSelected();

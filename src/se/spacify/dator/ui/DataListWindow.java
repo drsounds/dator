@@ -13,11 +13,13 @@ import jexer.event.TKeypressEvent;
 
 import se.spacify.dator.db.DataRepository;
 import se.spacify.dator.model.DatorColumn;
+import se.spacify.dator.model.DatorSummary;
 import se.spacify.dator.model.DatorTable;
 
 /**
- * Browses the rows of one materialized table: a read-only grid plus
- * New / Edit / Delete / Refresh actions that open DataRecordWindow.
+ * Browses the rows of one materialized table: a read-only grid (with
+ * optional SUM/AVG/etc. summary rows above and/or below) plus
+ * New / View / Edit / Delete / Refresh actions.
  */
 public class DataListWindow extends TWindow {
 
@@ -25,7 +27,10 @@ public class DataListWindow extends TWindow {
     private final DatorTable table;
     private List<DatorColumn> columns = new ArrayList<>();
     private List<Map<String, Object>> data = new ArrayList<>();
+    private List<DatorSummary> summaries = new ArrayList<>();
     private TTableWidget grid;
+    private TTableWidget topSummaryGrid;
+    private TTableWidget bottomSummaryGrid;
 
     public DataListWindow(DatorApplication app, DatorTable table) {
         super(app, "Data: " + table.getDisplayLabel(), 96, 26);
@@ -36,24 +41,29 @@ public class DataListWindow extends TWindow {
     }
 
     private void setupWidgets() {
-        addLabel("Ins=New  F4/Enter=Edit  Del=Delete  F5=Refresh  Esc=Close", 2, 1);
+        addLabel("Ins=New  Enter=View  F4=Edit  Del=Delete  F5=Refresh  Esc=Close", 2, 1);
 
         addButton("New", 2, getHeight() - 3, new TAction() {
             public void DO() {
                 newRecord();
             }
         });
-        addButton("Edit", 12, getHeight() - 3, new TAction() {
+        addButton("View", 12, getHeight() - 3, new TAction() {
+            public void DO() {
+                viewSelected();
+            }
+        });
+        addButton("Edit", 21, getHeight() - 3, new TAction() {
             public void DO() {
                 editSelected();
             }
         });
-        addButton("Delete", 22, getHeight() - 3, new TAction() {
+        addButton("Delete", 30, getHeight() - 3, new TAction() {
             public void DO() {
                 deleteSelected();
             }
         });
-        addButton("Refresh", 33, getHeight() - 3, new TAction() {
+        addButton("Refresh", 40, getHeight() - 3, new TAction() {
             public void DO() {
                 reload();
             }
@@ -66,9 +76,12 @@ public class DataListWindow extends TWindow {
     }
 
     public void reload() {
+        Map<Integer, Object> summaryValues;
         try {
             columns = app.getMetaRepository().listColumns(table.getId());
             data = app.getDataRepository().listRows(table, columns);
+            summaries = app.getMetaRepository().listSummaries(table.getId());
+            summaryValues = app.getDataRepository().computeSummaries(table, columns, summaries);
         } catch (Exception e) {
             app.showError(e);
             return;
@@ -77,10 +90,30 @@ public class DataListWindow extends TWindow {
         if (grid != null) {
             grid.remove();
         }
+        if (topSummaryGrid != null) {
+            topSummaryGrid.remove();
+            topSummaryGrid = null;
+        }
+        if (bottomSummaryGrid != null) {
+            bottomSummaryGrid.remove();
+            bottomSummaryGrid = null;
+        }
+
+        int width = getWidth() - 4;
+        int contentTop = 3;
+        int contentHeight = getHeight() - 8;
+
+        topSummaryGrid = GridUtil.buildSummaryRow(this, 1, contentTop, width, columns, summaries,
+                summaryValues, DatorSummary.TOP);
+        int topReserved = (topSummaryGrid != null) ? 4 : 0;
+        int bottomReserved = GridUtil.hasSummaryAt(summaries, DatorSummary.BOTTOM) ? 4 : 0;
+
+        int gridY = contentTop + topReserved;
+        int gridHeight = Math.max(3, contentHeight - topReserved - bottomReserved);
 
         int colCount = Math.max(columns.size(), 1);
         int rowCount = Math.max(data.size(), 1);
-        grid = new TTableWidget(this, 1, 3, getWidth() - 4, getHeight() - 8, colCount, rowCount);
+        grid = new TTableWidget(this, 1, gridY, width, gridHeight, colCount, rowCount);
 
         if (columns.isEmpty()) {
             grid.setColumnLabel(0, "(no columns)");
@@ -88,8 +121,8 @@ public class DataListWindow extends TWindow {
             for (int c = 0; c < columns.size(); c++) {
                 DatorColumn col = columns.get(c);
                 grid.setColumnLabel(c, col.getDisplayLabel());
-                int width = Math.max(10, Math.min(24, col.getDisplayLabel().length() + 2));
-                grid.setColumnWidth(c, width);
+                int width2 = Math.max(10, Math.min(24, col.getDisplayLabel().length() + 2));
+                grid.setColumnWidth(c, width2);
             }
         }
         grid.setHighlightRow(true);
@@ -102,24 +135,18 @@ public class DataListWindow extends TWindow {
             for (int r = 0; r < data.size(); r++) {
                 Map<String, Object> row = data.get(r);
                 for (int c = 0; c < columns.size(); c++) {
-                    grid.setCellText(c, r, formatValue(row.get(columns.get(c).getName())));
+                    grid.setCellText(c, r, GridUtil.formatValue(row.get(columns.get(c).getName())));
                 }
             }
         }
         for (int c = 0; c < colCount; c++) {
             grid.setColumnReadOnly(c, true);
         }
-        activate(grid);
-    }
 
-    private String formatValue(Object value) {
-        if (value == null) {
-            return "";
-        }
-        if (value instanceof byte[]) {
-            return "<blob:" + ((byte[]) value).length + "b>";
-        }
-        return value.toString();
+        bottomSummaryGrid = GridUtil.buildSummaryRow(this, 1, gridY + gridHeight + 1, width, columns,
+                summaries, summaryValues, DatorSummary.BOTTOM);
+
+        activate(grid);
     }
 
     private Long selectedRowid() {
@@ -140,6 +167,14 @@ public class DataListWindow extends TWindow {
                 reload();
             }
         });
+    }
+
+    private void viewSelected() {
+        Long rowid = selectedRowid();
+        if (rowid == null) {
+            return;
+        }
+        new DataRowView(app, table, rowid);
     }
 
     private void editSelected() {
@@ -170,12 +205,12 @@ public class DataListWindow extends TWindow {
             return;
         }
         TMessageBox result = app.messageBox("Delete Row",
-                "Delete this row? This cannot be undone.", TMessageBox.Type.YESNO);
+                "Delete this row?", TMessageBox.Type.YESNO);
         if (!result.isYes()) {
             return;
         }
         try {
-            app.getDataRepository().deleteRow(table, rowid);
+            app.getDataRepository().deleteRow(table, columns, rowid);
             reload();
         } catch (Exception e) {
             app.showError(e);
@@ -188,7 +223,10 @@ public class DataListWindow extends TWindow {
         if (key.equals(TKeypress.kbIns)) {
             newRecord();
             return;
-        } else if (key.equals(TKeypress.kbF4) || key.equals(TKeypress.kbEnter)) {
+        } else if (key.equals(TKeypress.kbEnter)) {
+            viewSelected();
+            return;
+        } else if (key.equals(TKeypress.kbF4)) {
             editSelected();
             return;
         } else if (key.equals(TKeypress.kbDel)) {

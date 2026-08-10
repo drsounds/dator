@@ -35,11 +35,12 @@ public class RelationEditWindow extends TWindow {
     private TComboBox refTableCombo;
     private TComboBox refColumnCombo;
     private TComboBox typeCombo;
+    private TComboBox displayCombo;
     private TField labelField;
     private TTableWidget grid;
 
     public RelationEditWindow(DatorApplication app, DatorTable table) {
-        super(app, "Relations for: " + table.getDisplayLabel(), 90, 24, TWindow.MODAL);
+        super(app, "Relations for: " + table.getDisplayLabel(), 90, 27, TWindow.MODAL);
         this.app = app;
         this.table = table;
         loadData();
@@ -102,15 +103,19 @@ public class RelationEditWindow extends TWindow {
         typeCombo = addComboBox(64, 2, 14,
                 List.of(DatorRelation.MANY_TO_ONE, DatorRelation.ONE_TO_ONE), 0, 3, null);
 
-        addLabel("Label (optional)", 2, 4);
-        labelField = addField(2, 5, 40, false, "");
+        addLabel("Display (single-row view)", 2, 4);
+        displayCombo = addComboBox(2, 5, 18,
+                List.of(DatorRelation.DISPLAY_TAB, DatorRelation.DISPLAY_TABLE), 0, 3, null);
 
-        addButton("Add Relation", 45, 5, new TAction() {
+        addLabel("Label (optional)", 22, 4);
+        labelField = addField(22, 5, 30, false, "");
+
+        addButton("Add Relation", 54, 5, new TAction() {
             public void DO() {
                 addRelation();
             }
         });
-        addButton("Remove Selected", 61, 5, new TAction() {
+        addButton("Remove Selected", 70, 5, new TAction() {
             public void DO() {
                 removeSelected();
             }
@@ -199,6 +204,7 @@ public class RelationEditWindow extends TWindow {
         r.setRefTableId(refTable.getId());
         r.setRefColumnId(refCol == null ? null : refCol.getId());
         r.setRelationType(typeCombo.getText().isEmpty() ? DatorRelation.MANY_TO_ONE : typeCombo.getText());
+        r.setDisplayMode(displayCombo.getText().isEmpty() ? DatorRelation.DISPLAY_TAB : displayCombo.getText());
         r.setLabel(labelField.getText().trim().isEmpty() ? null : labelField.getText().trim());
         relations.add(r);
         labelField.setText("");
@@ -222,17 +228,19 @@ public class RelationEditWindow extends TWindow {
             grid.remove();
         }
         int rowCount = Math.max(relations.size(), 1);
-        grid = new TTableWidget(this, 2, 7, getWidth() - 4, getHeight() - 13, 5, rowCount);
+        grid = new TTableWidget(this, 2, 9, getWidth() - 4, getHeight() - 15, 6, rowCount);
         grid.setColumnLabel(0, "Column");
         grid.setColumnLabel(1, "-> Table");
         grid.setColumnLabel(2, "-> Column");
         grid.setColumnLabel(3, "Type");
-        grid.setColumnLabel(4, "Label");
+        grid.setColumnLabel(4, "Display");
+        grid.setColumnLabel(5, "Label");
         grid.setColumnWidth(0, 14);
         grid.setColumnWidth(1, 16);
         grid.setColumnWidth(2, 14);
         grid.setColumnWidth(3, 12);
-        grid.setColumnWidth(4, 18);
+        grid.setColumnWidth(4, 10);
+        grid.setColumnWidth(5, 16);
         grid.setHighlightRow(true);
 
         if (relations.isEmpty()) {
@@ -245,10 +253,11 @@ public class RelationEditWindow extends TWindow {
                 grid.setCellText(2, i, r.getRefColumnId() == null ? "(rowid)" :
                         nameOfColumn(columnsOf(r.getRefTableId()), r.getRefColumnId()));
                 grid.setCellText(3, i, r.getRelationType());
-                grid.setCellText(4, i, r.getLabel() == null ? "" : r.getLabel());
+                grid.setCellText(4, i, r.getDisplayMode() == null ? DatorRelation.DISPLAY_TAB : r.getDisplayMode());
+                grid.setCellText(5, i, r.getLabel() == null ? "" : r.getLabel());
             }
         }
-        for (int c = 0; c < 5; c++) {
+        for (int c = 0; c < 6; c++) {
             grid.setColumnReadOnly(c, true);
         }
         activate(grid);

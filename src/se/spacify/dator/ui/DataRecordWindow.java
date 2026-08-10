@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import jexer.TAction;
 import jexer.TComboBox;
@@ -24,6 +25,10 @@ import se.spacify.dator.model.DatorTable;
  * rows; everything else is a plain text field.
  */
 public class DataRecordWindow extends TWindow {
+
+    /** created/updated/number/deleted are system-managed; not shown on the form. */
+    private static final Set<String> SYSTEM_MANAGED_COLUMNS =
+            Set.of("created", "updated", "number", "deleted");
 
     private final DatorApplication app;
     private final DatorTable table;
@@ -89,6 +94,9 @@ public class DataRecordWindow extends TWindow {
         int y = 1;
         for (DatorColumn c : columns) {
             if (isNew && autoPkColumn != null && c.getId() == autoPkColumn.getId()) {
+                continue;
+            }
+            if (SYSTEM_MANAGED_COLUMNS.contains(c.getName().toLowerCase(Locale.ROOT))) {
                 continue;
             }
             if ("BLOB".equalsIgnoreCase(c.getDataType())) {
@@ -264,11 +272,11 @@ public class DataRecordWindow extends TWindow {
 
         try {
             if (isNew) {
-                app.getDataRepository().insertRow(table, values);
+                app.getDataRepository().insertRow(table, columns, values);
             } else {
                 Object rowidObj = existingRow.get(DataRepository.ROWID);
                 long rowid = ((Number) rowidObj).longValue();
-                app.getDataRepository().updateRow(table, rowid, values);
+                app.getDataRepository().updateRow(table, columns, rowid, values);
             }
             if (onSaved != null) {
                 onSaved.DO();

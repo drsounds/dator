@@ -16,6 +16,7 @@ import java.util.regex.Pattern;
 
 import se.spacify.dator.model.DatorColumn;
 import se.spacify.dator.model.DatorRelation;
+import se.spacify.dator.model.DatorSummary;
 import se.spacify.dator.model.DatorTable;
 
 /**
@@ -34,7 +35,12 @@ public class MetaRepository {
 
     private static final Set<String> RESERVED_NAMES = new HashSet<>(List.of(
             "dator_tables", "dator_table_columns", "dator_table_relations",
+            "dator_table_summaries", "dator_events",
             "sqlite_master", "sqlite_sequence"));
+
+    /** Columns automatically ensured on every data table. */
+    public static final List<String> STANDARD_COLUMN_NAMES =
+            List.of("parent_id", "number", "created", "updated", "deleted");
 
     private final Database db;
 
@@ -70,7 +76,50 @@ public class MetaRepository {
                 "ref_table_id INTEGER NOT NULL REFERENCES dator_tables(id) ON DELETE CASCADE, " +
                 "ref_column_id INTEGER REFERENCES dator_table_columns(id) ON DELETE SET NULL, " +
                 "relation_type TEXT NOT NULL DEFAULT 'many-to-one', " +
+                "display_mode TEXT NOT NULL DEFAULT 'tab', " +
                 "label TEXT)");
+
+        db.execute("CREATE TABLE IF NOT EXISTS dator_table_summaries (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "table_id INTEGER NOT NULL REFERENCES dator_tables(id) ON DELETE CASCADE, " +
+                "column_id INTEGER NOT NULL REFERENCES dator_table_columns(id) ON DELETE CASCADE, " +
+                "aggregate TEXT NOT NULL, " +
+                "position TEXT NOT NULL DEFAULT 'bottom', " +
+                "label TEXT)");
+
+        // Append-only event journal: no foreign keys, so history survives
+        // schema edits and is never cascade-deleted.
+        db.execute("CREATE TABLE IF NOT EXISTS dator_events (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "created TEXT NOT NULL DEFAULT (datetime('now')), " +
+                "subject TEXT NOT NULL, " +
+                "predicate TEXT NOT NULL, " +
+                "object_id INTEGER NOT NULL, " +
+                "column_id INTEGER, " +
+                "column_name TEXT, " +
+                "old_value TEXT, " +
+                "new_value TEXT, " +
+                "prev_hash TEXT NOT NULL, " +
+                "hash TEXT NOT NULL)");
+
+        migrateRelationsDisplayMode();
+    }
+
+    /** Adds display_mode to dator_table_relations for databases created before it existed. */
+    private void migrateRelationsDisplayMode() throws SQLException {
+        boolean hasColumn = false;
+        try (Statement st = db.getConnection().createStatement();
+             ResultSet rs = st.executeQuery("PRAGMA table_info(dator_table_relations)")) {
+            while (rs.next()) {
+                if ("display_mode".equalsIgnoreCase(rs.getString("name"))) {
+                    hasColumn = true;
+                    break;
+                }
+            }
+        }
+        if (!hasColumn) {
+            db.execute("ALTER TABLE dator_table_relations ADD COLUMN display_mode TEXT NOT NULL DEFAULT 'tab'");
+        }
     }
 
     // ------------------------------------------------------------------
@@ -156,8 +205,8 @@ public class MetaRepository {
     public List<DatorRelation> listRelations(int tableId) throws SQLException {
         List<DatorRelation> result = new ArrayList<>();
         try (PreparedStatement ps = db.getConnection().prepareStatement(
-                "SELECT id, table_id, column_id, ref_table_id, ref_column_id, relation_type, label " +
-                        "FROM dator_table_relations WHERE table_id=? ORDER BY id")) {
+                "SELECT id, table_id, column_id, ref_table_id, ref_column_id, relation_type, " +
+                        "display_mode, label FROM dator_table_relations WHERE table_id=? ORDER BY id")) {
             ps.setInt(1, tableId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -172,12 +221,34 @@ public class MetaRepository {
     public List<DatorRelation> listRelationsReferencing(int refTableId) throws SQLException {
         List<DatorRelation> result = new ArrayList<>();
         try (PreparedStatement ps = db.getConnection().prepareStatement(
-                "SELECT id, table_id, column_id, ref_table_id, ref_column_id, relation_type, label " +
-                        "FROM dator_table_relations WHERE ref_table_id=? ORDER BY id")) {
+                "SELECT id, table_id, column_id, ref_table_id, ref_column_id, relation_type, " +
+                        "display_mode, label FROM dator_table_relations WHERE ref_table_id=? ORDER BY id")) {
             ps.setInt(1, refTableId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     result.add(readRelation(rs));
+                }
+            }
+        }
+        return result;
+    }
+
+    public List<DatorSummary> listSummaries(int tableId) throws SQLException {
+        List<DatorSummary> result = new ArrayList<>();
+        try (PreparedStatement ps = db.getConnection().prepareStatement(
+                "SELECT id, table_id, column_id, aggregate, position, label " +
+                        "FROM dator_table_summaries WHERE table_id=? ORDER BY id")) {
+            ps.setInt(1, tableId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    DatorSummary s = new DatorSummary();
+                    s.setId(rs.getInt("id"));
+                    s.setTableId(rs.getInt("table_id"));
+                    s.setColumnId(rs.getInt("column_id"));
+                    s.setAggregate(rs.getString("aggregate"));
+                    s.setPosition(rs.getString("position"));
+                    s.setLabel(rs.getString("label"));
+                    result.add(s);
                 }
             }
         }
@@ -193,6 +264,7 @@ public class MetaRepository {
         int refCol = rs.getInt("ref_column_id");
         r.setRefColumnId(rs.wasNull() ? null : refCol);
         r.setRelationType(rs.getString("relation_type"));
+        r.setDisplayMode(rs.getString("display_mode"));
         r.setLabel(rs.getString("label"));
         return r;
     }
@@ -207,6 +279,7 @@ public class MetaRepository {
      * as new; existing columns not present in newColumns are dropped.
      */
     public DatorTable saveTableModel(DatorTable table, List<DatorColumn> newColumns) throws SQLException {
+        ensureStandardColumns(newColumns);
         if (newColumns.isEmpty()) {
             throw new IllegalArgumentException("A table needs at least one column");
         }
@@ -252,6 +325,7 @@ public class MetaRepository {
             syncColumnsMeta(table.getId(), oldColumns, newColumns);
             List<DatorColumn> finalColumns = listColumns(table.getId());
             rebuildPhysicalTable(oldPhysicalName, table.getName(), oldColumns, finalColumns);
+            ensureSelfParentRelation(table.getId(), finalColumns);
 
             conn.commit();
             return table;
@@ -260,6 +334,103 @@ public class MetaRepository {
             throw e;
         } finally {
             conn.setAutoCommit(prevAutoCommit);
+        }
+    }
+
+    /** Fresh copies of the standard bookkeeping columns every table gets. */
+    public static List<DatorColumn> standardColumnDefs() {
+        List<DatorColumn> list = new ArrayList<>();
+
+        DatorColumn parentId = new DatorColumn("parent_id", "INTEGER");
+        parentId.setLabel("Parent");
+        parentId.setNullable(true);
+        list.add(parentId);
+
+        DatorColumn number = new DatorColumn("number", "INTEGER");
+        number.setLabel("Number");
+        number.setNullable(true);
+        list.add(number);
+
+        DatorColumn created = new DatorColumn("created", "TEXT");
+        created.setLabel("Created");
+        created.setNullable(false);
+        list.add(created);
+
+        DatorColumn updated = new DatorColumn("updated", "TEXT");
+        updated.setLabel("Updated");
+        updated.setNullable(true);
+        list.add(updated);
+
+        DatorColumn deleted = new DatorColumn("deleted", "INTEGER");
+        deleted.setLabel("Deleted");
+        deleted.setNullable(false);
+        deleted.setDefaultValue("0");
+        list.add(deleted);
+
+        return list;
+    }
+
+    /** Appends any of the standard columns missing from this list (matched by name, case-insensitive). */
+    public static void ensureStandardColumns(List<DatorColumn> columns) {
+        Set<String> existing = new HashSet<>();
+        for (DatorColumn c : columns) {
+            existing.add(c.getName().toLowerCase(Locale.ROOT));
+        }
+        for (DatorColumn std : standardColumnDefs()) {
+            if (!existing.contains(std.getName().toLowerCase(Locale.ROOT))) {
+                columns.add(std);
+            }
+        }
+    }
+
+    /**
+     * Every table gets a parent_id column (for tree-shaped parent/child
+     * rows); wire it up as a self-referencing relation, shown inline as
+     * "Children" in the single-row view, so the pairing is useful out of
+     * the box. No-op if the relation already exists.
+     */
+    private void ensureSelfParentRelation(int tableId, List<DatorColumn> columns) throws SQLException {
+        DatorColumn parentIdCol = null;
+        DatorColumn pk = null;
+        for (DatorColumn c : columns) {
+            if (c.getName().equalsIgnoreCase("parent_id")) {
+                parentIdCol = c;
+            }
+            if (c.isPk()) {
+                pk = c;
+            }
+        }
+        if (parentIdCol == null) {
+            return;
+        }
+
+        try (PreparedStatement ps = db.getConnection().prepareStatement(
+                "SELECT 1 FROM dator_table_relations WHERE table_id=? AND column_id=? AND ref_table_id=?")) {
+            ps.setInt(1, tableId);
+            ps.setInt(2, parentIdCol.getId());
+            ps.setInt(3, tableId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return;
+                }
+            }
+        }
+
+        try (PreparedStatement ps = db.getConnection().prepareStatement(
+                "INSERT INTO dator_table_relations(table_id, column_id, ref_table_id, ref_column_id, " +
+                        "relation_type, display_mode, label) VALUES (?,?,?,?,?,?,?)")) {
+            ps.setInt(1, tableId);
+            ps.setInt(2, parentIdCol.getId());
+            ps.setInt(3, tableId);
+            if (pk != null) {
+                ps.setInt(4, pk.getId());
+            } else {
+                ps.setNull(4, java.sql.Types.INTEGER);
+            }
+            ps.setString(5, DatorRelation.MANY_TO_ONE);
+            ps.setString(6, DatorRelation.DISPLAY_TABLE);
+            ps.setString(7, "Children");
+            ps.executeUpdate();
         }
     }
 
@@ -491,7 +662,7 @@ public class MetaRepository {
             for (DatorRelation r : relations) {
                 try (PreparedStatement ps = conn.prepareStatement(
                         "INSERT INTO dator_table_relations(table_id, column_id, ref_table_id, " +
-                                "ref_column_id, relation_type, label) VALUES (?,?,?,?,?,?)")) {
+                                "ref_column_id, relation_type, display_mode, label) VALUES (?,?,?,?,?,?,?)")) {
                     ps.setInt(1, tableId);
                     ps.setInt(2, r.getColumnId());
                     ps.setInt(3, r.getRefTableId());
@@ -501,7 +672,44 @@ public class MetaRepository {
                         ps.setInt(4, r.getRefColumnId());
                     }
                     ps.setString(5, r.getRelationType());
-                    ps.setString(6, r.getLabel());
+                    ps.setString(6, r.getDisplayMode() == null ? DatorRelation.DISPLAY_TAB : r.getDisplayMode());
+                    ps.setString(7, r.getLabel());
+                    ps.executeUpdate();
+                }
+            }
+            conn.commit();
+        } catch (RuntimeException | SQLException e) {
+            conn.rollback();
+            throw e;
+        } finally {
+            conn.setAutoCommit(prevAutoCommit);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Writing: summaries
+    // ------------------------------------------------------------------
+
+    /** Replaces the full set of summary rows owned by this table. */
+    public void replaceSummaries(int tableId, List<DatorSummary> summaries) throws SQLException {
+        Connection conn = db.getConnection();
+        boolean prevAutoCommit = conn.getAutoCommit();
+        conn.setAutoCommit(false);
+        try {
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "DELETE FROM dator_table_summaries WHERE table_id=?")) {
+                ps.setInt(1, tableId);
+                ps.executeUpdate();
+            }
+            for (DatorSummary s : summaries) {
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "INSERT INTO dator_table_summaries(table_id, column_id, aggregate, position, label) " +
+                                "VALUES (?,?,?,?,?)")) {
+                    ps.setInt(1, tableId);
+                    ps.setInt(2, s.getColumnId());
+                    ps.setString(3, s.getAggregate());
+                    ps.setString(4, s.getPosition());
+                    ps.setString(5, s.getLabel());
                     ps.executeUpdate();
                 }
             }
