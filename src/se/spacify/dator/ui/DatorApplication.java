@@ -32,6 +32,7 @@ public class DatorApplication extends TApplication {
 
     public DatorApplication(String dbPath) throws UnsupportedEncodingException, SQLException {
         super(BackendType.SWING);
+        IspfTheme.apply(getTheme());
         openDatabase(dbPath);
         buildMenu();
         tableListWindow = new TableListWindow(this);
