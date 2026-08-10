@@ -50,6 +50,8 @@ public class DataRowView extends TWindow {
     private final List<TWidget> contentWidgets = new ArrayList<>();
     private final Map<TTableWidget, List<Map<String, Object>>> gridChildRows = new HashMap<>();
     private final Map<TTableWidget, DatorTable> gridChildTable = new HashMap<>();
+    private TTableWidget fieldGrid;
+    private final Map<Integer, GridUtil.FkInfo> fieldGridFk = new HashMap<>();
 
     public DataRowView(DatorApplication app, DatorTable table, long rowid) {
         super(app, "View: " + table.getDisplayLabel(), 100, 30);
@@ -174,6 +176,8 @@ public class DataRowView extends TWindow {
         contentWidgets.clear();
         gridChildRows.clear();
         gridChildTable.clear();
+        fieldGrid = null;
+        fieldGridFk.clear();
 
         int left = 2;
         int top = contentTop;
@@ -191,6 +195,8 @@ public class DataRowView extends TWindow {
     }
 
     private int buildFieldGrid(int x, int y, int width) {
+        Map<String, Map<Object, GridUtil.FkInfo>> fkIndex = GridUtil.buildFkIndex(app, table, columns);
+
         int rowCount = Math.max(columns.size(), 1);
         int height = Math.min(rowCount, FIELD_GRID_MAX_ROWS) + 2;
         TTableWidget grid = new TabbableTable(this, x, y, width, height, 2, rowCount);
@@ -203,14 +209,21 @@ public class DataRowView extends TWindow {
         } else {
             for (int i = 0; i < columns.size(); i++) {
                 DatorColumn c = columns.get(i);
-                grid.setCellText(0, i, c.getDisplayLabel());
-                grid.setCellText(1, i, GridUtil.formatValue(row.get(c.getName())));
+                Object rawValue = row.get(c.getName());
+                Map<Object, GridUtil.FkInfo> byValue = fkIndex.get(c.getName());
+                GridUtil.FkInfo info = (byValue != null && rawValue != null) ? byValue.get(rawValue) : null;
+                grid.setCellText(0, i, c.getDisplayLabel() + (info != null ? " ->" : ""));
+                grid.setCellText(1, i, info != null ? info.displayText : GridUtil.formatValue(rawValue));
+                if (info != null) {
+                    fieldGridFk.put(i, info);
+                }
             }
         }
         grid.setColumnReadOnly(0, true);
         grid.setColumnReadOnly(1, true);
         grid.setHighlightRow(true);
         contentWidgets.add(grid);
+        fieldGrid = grid;
         activate(grid);
         return y + height + 1;
     }
@@ -244,10 +257,14 @@ public class DataRowView extends TWindow {
             contentWidgets.add(sectionLabel);
             y += 1;
 
+            List<DatorColumn> displayChildColumns = GridUtil.visibleColumns(childColumns);
+            Map<String, Map<Object, GridUtil.FkInfo>> childFkIndex =
+                    GridUtil.buildFkIndex(app, childTable, childColumns);
+
             List<DatorSummary> childSummaries = app.getMetaRepository().listSummaries(childTable.getId());
             Map<Integer, Object> summaryValues = computeChildSummaries(childColumns, childSummaries, filtered);
 
-            TTableWidget topSummary = GridUtil.buildSummaryRow(this, x, y, width, childColumns, childSummaries,
+            TTableWidget topSummary = GridUtil.buildSummaryRow(this, x, y, width, displayChildColumns, childSummaries,
                     summaryValues, DatorSummary.TOP);
             if (topSummary != null) {
                 contentWidgets.add(topSummary);
@@ -255,30 +272,32 @@ public class DataRowView extends TWindow {
             }
 
             int rowCount = Math.max(filtered.size(), 1);
-            int colCount = Math.max(childColumns.size(), 1);
+            int colCount = Math.max(displayChildColumns.size(), 1);
             boolean hasBottomSummary = GridUtil.hasSummaryAt(childSummaries, DatorSummary.BOTTOM);
             int height = fillRemaining
                     ? Math.max(3, getHeight() - y - 4 - (hasBottomSummary ? 4 : 0))
                     : Math.min(rowCount, CHILD_GRID_MAX_ROWS) + 2;
 
             TTableWidget grid = new TabbableTable(this, x, y, width, height, colCount, rowCount);
-            if (childColumns.isEmpty()) {
+            if (displayChildColumns.isEmpty()) {
                 grid.setColumnLabel(0, "(no columns)");
             } else {
-                for (int c = 0; c < childColumns.size(); c++) {
-                    DatorColumn cc = childColumns.get(c);
+                for (int c = 0; c < displayChildColumns.size(); c++) {
+                    DatorColumn cc = displayChildColumns.get(c);
                     grid.setColumnLabel(c, cc.getDisplayLabel());
                     grid.setColumnWidth(c, Math.max(10, Math.min(20, cc.getDisplayLabel().length() + 2)));
                 }
             }
             if (filtered.isEmpty()) {
-                if (!childColumns.isEmpty()) {
+                if (!displayChildColumns.isEmpty()) {
                     grid.setCellText(0, 0, "(none)");
                 }
             } else {
                 for (int r = 0; r < filtered.size(); r++) {
-                    for (int c = 0; c < childColumns.size(); c++) {
-                        grid.setCellText(c, r, GridUtil.formatValue(filtered.get(r).get(childColumns.get(c).getName())));
+                    for (int c = 0; c < displayChildColumns.size(); c++) {
+                        DatorColumn cc = displayChildColumns.get(c);
+                        grid.setCellText(c, r,
+                                GridUtil.formatCell(childFkIndex, cc, filtered.get(r).get(cc.getName())));
                     }
                 }
             }
@@ -294,8 +313,8 @@ public class DataRowView extends TWindow {
             }
             y += height + 1;
 
-            TTableWidget bottomSummary = GridUtil.buildSummaryRow(this, x, y, width, childColumns, childSummaries,
-                    summaryValues, DatorSummary.BOTTOM);
+            TTableWidget bottomSummary = GridUtil.buildSummaryRow(this, x, y, width, displayChildColumns,
+                    childSummaries, summaryValues, DatorSummary.BOTTOM);
             if (bottomSummary != null) {
                 contentWidgets.add(bottomSummary);
                 y += 4;
@@ -441,6 +460,13 @@ public class DataRowView extends TWindow {
             if (active instanceof TTableWidget && gridChildRows.containsKey(active)) {
                 drillDown((TTableWidget) active);
                 return;
+            }
+            if (active == fieldGrid && fieldGrid != null) {
+                GridUtil.FkInfo info = fieldGridFk.get(fieldGrid.getSelectedRowNumber());
+                if (info != null) {
+                    new DataRowView(app, info.targetTable, info.targetRowid);
+                    return;
+                }
             }
         }
         super.onKeypress(event);

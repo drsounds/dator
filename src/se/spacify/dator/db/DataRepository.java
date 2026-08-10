@@ -3,6 +3,7 @@ package se.spacify.dator.db;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -15,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import se.spacify.dator.model.DatorColumn;
 import se.spacify.dator.model.DatorSummary;
@@ -39,8 +41,12 @@ public class DataRepository {
 
     private static final String GENESIS_HASH = "0".repeat(64);
     private static final Set<String> ALLOWED_AGGREGATES = Set.of("SUM", "AVG", "COUNT", "MIN", "MAX");
+    private static final String BASE62_ALPHABET =
+            "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    private static final int SLUG_LENGTH = 10;
 
     private final Database db;
+    private final SecureRandom random = new SecureRandom();
 
     public DataRepository(Database db) {
         this.db = db;
@@ -54,11 +60,17 @@ public class DataRepository {
         StringBuilder sql = new StringBuilder("SELECT rowid AS ").append(MetaRepository.quote(ROWID))
                 .append(selectColumns(columns))
                 .append(" FROM ").append(MetaRepository.quote(table.getName()));
-        if (hasColumn(columns, "deleted")) {
-            sql.append(" WHERE ").append(MetaRepository.quote("deleted")).append("=0");
+        String deletedFilter = deletedFilterSql(columns);
+        if (deletedFilter != null) {
+            sql.append(" WHERE ").append(deletedFilter);
         }
         sql.append(" ORDER BY ");
-        if (hasColumn(columns, "number")) {
+        DatorColumn sortColumn = table.getSortColumnId() == null ? null : columnById(columns, table.getSortColumnId());
+        if (sortColumn != null) {
+            sql.append(MetaRepository.quote(sortColumn.getName()))
+                    .append(DatorTable.SORT_DESC.equalsIgnoreCase(table.getSortDirection()) ? " DESC" : " ASC")
+                    .append(", ");
+        } else if (hasColumn(columns, "number")) {
             sql.append(MetaRepository.quote("number")).append(" IS NULL, ")
                     .append(MetaRepository.quote("number")).append(", ");
         }
@@ -138,8 +150,9 @@ public class DataRepository {
                     .append(MetaRepository.quote(targets.get(i).getName())).append(")");
         }
         sql.append(" FROM ").append(MetaRepository.quote(table.getName()));
-        if (hasColumn(columns, "deleted")) {
-            sql.append(" WHERE ").append(MetaRepository.quote("deleted")).append("=0");
+        String deletedFilter = deletedFilterSql(columns);
+        if (deletedFilter != null) {
+            sql.append(" WHERE ").append(deletedFilter);
         }
 
         try (Statement st = db.getConnection().createStatement();
@@ -153,6 +166,21 @@ public class DataRepository {
         return result;
     }
 
+    /**
+     * "Not deleted" predicate, tolerant of both the current convention
+     * (nullable TEXT timestamp, NULL = not deleted) and the legacy one
+     * (NOT NULL INTEGER flag, 0 = not deleted) for tables created before
+     * the column's type changed.
+     */
+    private String deletedFilterSql(List<DatorColumn> columns) {
+        DatorColumn deleted = columnByName(columns, "deleted");
+        if (deleted == null) {
+            return null;
+        }
+        String quoted = MetaRepository.quote("deleted");
+        return "INTEGER".equalsIgnoreCase(deleted.getDataType()) ? quoted + "=0" : quoted + " IS NULL";
+    }
+
     // ------------------------------------------------------------------
     // Writing
     // ------------------------------------------------------------------
@@ -164,6 +192,12 @@ public class DataRepository {
         }
         if (hasColumn(columns, "number") && !toWrite.containsKey("number")) {
             toWrite.put("number", nextNumber(table));
+        }
+        if (hasColumn(columns, "uuid") && !toWrite.containsKey("uuid")) {
+            toWrite.put("uuid", UUID.randomUUID().toString());
+        }
+        if (hasColumn(columns, "slug") && !toWrite.containsKey("slug")) {
+            toWrite.put("slug", randomBase62(SLUG_LENGTH));
         }
 
         Connection conn = db.getConnection();
@@ -217,11 +251,18 @@ public class DataRepository {
         }
     }
 
-    /** Soft-deletes (sets deleted=1) when the table has that column; otherwise a real DELETE. */
+    /**
+     * Soft-deletes when the table has a "deleted" column: stamps the
+     * current timestamp (or, for tables predating this convention, sets
+     * the legacy INTEGER flag to 1). Otherwise a real DELETE.
+     */
     public void deleteRow(DatorTable table, List<DatorColumn> columns, long rowid) throws SQLException {
-        if (hasColumn(columns, "deleted")) {
+        DatorColumn deletedColumn = columnByName(columns, "deleted");
+        if (deletedColumn != null) {
             Map<String, Object> values = new LinkedHashMap<>();
-            values.put("deleted", 1L);
+            Object deletedValue = "INTEGER".equalsIgnoreCase(deletedColumn.getDataType())
+                    ? (Object) 1L : (Object) nowTimestamp();
+            values.put("deleted", deletedValue);
             updateRow(table, columns, rowid, values);
             return;
         }
@@ -340,6 +381,14 @@ public class DataRepository {
             rs.next();
             return rs.getString(1);
         }
+    }
+
+    private String randomBase62(int length) {
+        StringBuilder sb = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            sb.append(BASE62_ALPHABET.charAt(random.nextInt(BASE62_ALPHABET.length())));
+        }
+        return sb.toString();
     }
 
     private long nextNumber(DatorTable table) throws SQLException {

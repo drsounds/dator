@@ -29,7 +29,7 @@ public class MetaRepository {
     private static final Pattern IDENTIFIER = Pattern.compile("^[A-Za-z_][A-Za-z0-9_]*$");
 
     public static final List<String> COLUMN_TYPES =
-            List.of("TEXT", "INTEGER", "REAL", "BLOB", "NUMERIC");
+            List.of("TEXT", "LONGTEXT", "INTEGER", "REAL", "BLOB", "NUMERIC");
 
     private static final Set<String> ALLOWED_TYPES = new HashSet<>(COLUMN_TYPES);
 
@@ -40,7 +40,10 @@ public class MetaRepository {
 
     /** Columns automatically ensured on every data table. */
     public static final List<String> STANDARD_COLUMN_NAMES =
-            List.of("parent_id", "number", "created", "updated", "deleted");
+            List.of("parent_id", "number", "created", "updated", "deleted", "uuid", "slug");
+
+    /** Standard columns hidden by default from list/grid views (still fully usable otherwise). */
+    public static final Set<String> HIDDEN_LIST_COLUMNS = new HashSet<>(STANDARD_COLUMN_NAMES);
 
     private final Database db;
 
@@ -54,6 +57,9 @@ public class MetaRepository {
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
                 "name TEXT NOT NULL UNIQUE, " +
                 "label TEXT, " +
+                "sort_column_id INTEGER REFERENCES dator_table_columns(id) ON DELETE SET NULL, " +
+                "sort_direction TEXT NOT NULL DEFAULT 'asc', " +
+                "list_view_mode TEXT NOT NULL DEFAULT 'table', " +
                 "created_at TEXT NOT NULL DEFAULT (datetime('now')))");
 
         db.execute("CREATE TABLE IF NOT EXISTS dator_table_columns (" +
@@ -103,22 +109,39 @@ public class MetaRepository {
                 "hash TEXT NOT NULL)");
 
         migrateRelationsDisplayMode();
+        migrateTableSortColumns();
     }
 
     /** Adds display_mode to dator_table_relations for databases created before it existed. */
     private void migrateRelationsDisplayMode() throws SQLException {
+        addColumnIfMissing("dator_table_relations", "display_mode",
+                "ALTER TABLE dator_table_relations ADD COLUMN display_mode TEXT NOT NULL DEFAULT 'tab'");
+    }
+
+    /** Adds sort_column_id/sort_direction/list_view_mode to dator_tables for older databases. */
+    private void migrateTableSortColumns() throws SQLException {
+        addColumnIfMissing("dator_tables", "sort_column_id",
+                "ALTER TABLE dator_tables ADD COLUMN sort_column_id INTEGER " +
+                        "REFERENCES dator_table_columns(id) ON DELETE SET NULL");
+        addColumnIfMissing("dator_tables", "sort_direction",
+                "ALTER TABLE dator_tables ADD COLUMN sort_direction TEXT NOT NULL DEFAULT 'asc'");
+        addColumnIfMissing("dator_tables", "list_view_mode",
+                "ALTER TABLE dator_tables ADD COLUMN list_view_mode TEXT NOT NULL DEFAULT 'table'");
+    }
+
+    private void addColumnIfMissing(String table, String column, String alterSql) throws SQLException {
         boolean hasColumn = false;
         try (Statement st = db.getConnection().createStatement();
-             ResultSet rs = st.executeQuery("PRAGMA table_info(dator_table_relations)")) {
+             ResultSet rs = st.executeQuery("PRAGMA table_info(" + table + ")")) {
             while (rs.next()) {
-                if ("display_mode".equalsIgnoreCase(rs.getString("name"))) {
+                if (column.equalsIgnoreCase(rs.getString("name"))) {
                     hasColumn = true;
                     break;
                 }
             }
         }
         if (!hasColumn) {
-            db.execute("ALTER TABLE dator_table_relations ADD COLUMN display_mode TEXT NOT NULL DEFAULT 'tab'");
+            db.execute(alterSql);
         }
     }
 
@@ -150,13 +173,25 @@ public class MetaRepository {
     // Reading
     // ------------------------------------------------------------------
 
+    private static final String TABLE_COLUMNS =
+            "id, name, label, sort_column_id, sort_direction, list_view_mode";
+
+    private DatorTable readTable(ResultSet rs) throws SQLException {
+        DatorTable t = new DatorTable(rs.getInt("id"), rs.getString("name"), rs.getString("label"));
+        int sortColumnId = rs.getInt("sort_column_id");
+        t.setSortColumnId(rs.wasNull() ? null : sortColumnId);
+        t.setSortDirection(rs.getString("sort_direction"));
+        t.setListViewMode(rs.getString("list_view_mode"));
+        return t;
+    }
+
     public List<DatorTable> listTables() throws SQLException {
         List<DatorTable> result = new ArrayList<>();
         try (Statement st = db.getConnection().createStatement();
              ResultSet rs = st.executeQuery(
-                     "SELECT id, name, label FROM dator_tables ORDER BY name")) {
+                     "SELECT " + TABLE_COLUMNS + " FROM dator_tables ORDER BY name")) {
             while (rs.next()) {
-                result.add(new DatorTable(rs.getInt("id"), rs.getString("name"), rs.getString("label")));
+                result.add(readTable(rs));
             }
         }
         return result;
@@ -164,11 +199,11 @@ public class MetaRepository {
 
     public DatorTable getTable(int id) throws SQLException {
         try (PreparedStatement ps = db.getConnection().prepareStatement(
-                "SELECT id, name, label FROM dator_tables WHERE id=?")) {
+                "SELECT " + TABLE_COLUMNS + " FROM dator_tables WHERE id=?")) {
             ps.setInt(1, id);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    return new DatorTable(rs.getInt("id"), rs.getString("name"), rs.getString("label"));
+                    return readTable(rs);
                 }
             }
         }
@@ -341,6 +376,18 @@ public class MetaRepository {
     public static List<DatorColumn> standardColumnDefs() {
         List<DatorColumn> list = new ArrayList<>();
 
+        DatorColumn uuid = new DatorColumn("uuid", "TEXT");
+        uuid.setLabel("UUID");
+        uuid.setNullable(false);
+        uuid.setUnique(true);
+        list.add(uuid);
+
+        DatorColumn slug = new DatorColumn("slug", "TEXT");
+        slug.setLabel("Slug");
+        slug.setNullable(false);
+        slug.setUnique(true);
+        list.add(slug);
+
         DatorColumn parentId = new DatorColumn("parent_id", "INTEGER");
         parentId.setLabel("Parent");
         parentId.setNullable(true);
@@ -361,10 +408,11 @@ public class MetaRepository {
         updated.setNullable(true);
         list.add(updated);
 
-        DatorColumn deleted = new DatorColumn("deleted", "INTEGER");
+        // Nullable timestamp: NULL means "not deleted", a datetime value
+        // records when it was soft-deleted.
+        DatorColumn deleted = new DatorColumn("deleted", "TEXT");
         deleted.setLabel("Deleted");
-        deleted.setNullable(false);
-        deleted.setDefaultValue("0");
+        deleted.setNullable(true);
         list.add(deleted);
 
         return list;
@@ -455,15 +503,40 @@ public class MetaRepository {
 
     public DatorTable findTableByName(String name) throws SQLException {
         try (PreparedStatement ps = db.getConnection().prepareStatement(
-                "SELECT id, name, label FROM dator_tables WHERE name=?")) {
+                "SELECT " + TABLE_COLUMNS + " FROM dator_tables WHERE name=?")) {
             ps.setString(1, name);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    return new DatorTable(rs.getInt("id"), rs.getString("name"), rs.getString("label"));
+                    return readTable(rs);
                 }
             }
         }
         return null;
+    }
+
+    /** Persists just the sort column/direction, without touching the physical schema. */
+    public void updateTableSort(DatorTable table) throws SQLException {
+        try (PreparedStatement ps = db.getConnection().prepareStatement(
+                "UPDATE dator_tables SET sort_column_id=?, sort_direction=? WHERE id=?")) {
+            if (table.getSortColumnId() == null) {
+                ps.setNull(1, java.sql.Types.INTEGER);
+            } else {
+                ps.setInt(1, table.getSortColumnId());
+            }
+            ps.setString(2, table.getSortDirection() == null ? DatorTable.SORT_ASC : table.getSortDirection());
+            ps.setInt(3, table.getId());
+            ps.executeUpdate();
+        }
+    }
+
+    /** Persists just the list view mode (table/card), without touching the physical schema. */
+    public void updateListViewMode(DatorTable table) throws SQLException {
+        try (PreparedStatement ps = db.getConnection().prepareStatement(
+                "UPDATE dator_tables SET list_view_mode=? WHERE id=?")) {
+            ps.setString(1, table.getListViewMode() == null ? DatorTable.VIEW_TABLE : table.getListViewMode());
+            ps.setInt(2, table.getId());
+            ps.executeUpdate();
+        }
     }
 
     private int insertTableRow(DatorTable table) throws SQLException {
@@ -603,7 +676,7 @@ public class MetaRepository {
         List<String> defs = new ArrayList<>();
         for (DatorColumn c : columns) {
             StringBuilder cd = new StringBuilder();
-            cd.append(quote(c.getName())).append(' ').append(c.getDataType().toUpperCase(Locale.ROOT));
+            cd.append(quote(c.getName())).append(' ').append(sqlTypeFor(c.getDataType()));
             if (singleIntegerAutoPk && c.isPk()) {
                 cd.append(" PRIMARY KEY AUTOINCREMENT");
             } else {
@@ -629,6 +702,12 @@ public class MetaRepository {
         }
 
         return "CREATE TABLE " + quote(tableName) + " (\n  " + String.join(",\n  ", defs) + "\n)";
+    }
+
+    /** LONGTEXT is a meta-only distinction (renders as a multiline editor); SQLite just sees TEXT. */
+    private String sqlTypeFor(String dataType) {
+        String type = dataType.toUpperCase(Locale.ROOT);
+        return "LONGTEXT".equals(type) ? "TEXT" : type;
     }
 
     private String formatDefault(String dataType, String value) {

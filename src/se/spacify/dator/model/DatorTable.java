@@ -6,9 +6,20 @@ package se.spacify.dator.model;
  */
 public class DatorTable {
 
+    public static final String SORT_ASC = "asc";
+    public static final String SORT_DESC = "desc";
+
+    public static final String VIEW_TABLE = "table";
+    public static final String VIEW_CARD = "card";
+
     private int id;
     private String name;
     private String label;
+    /** Column to order list views by; null means the default (number/rowid) ordering. */
+    private Integer sortColumnId;
+    private String sortDirection = SORT_ASC;
+    /** Per-table default list view: "table" (grid) or "card" (stacked cards). */
+    private String listViewMode = VIEW_TABLE;
 
     public DatorTable() {
     }
@@ -45,6 +56,30 @@ public class DatorTable {
 
     public String getDisplayLabel() {
         return (label == null || label.isEmpty()) ? name : label;
+    }
+
+    public Integer getSortColumnId() {
+        return sortColumnId;
+    }
+
+    public void setSortColumnId(Integer sortColumnId) {
+        this.sortColumnId = sortColumnId;
+    }
+
+    public String getSortDirection() {
+        return sortDirection;
+    }
+
+    public String getListViewMode() {
+        return listViewMode;
+    }
+
+    public void setListViewMode(String listViewMode) {
+        this.listViewMode = listViewMode;
+    }
+
+    public void setSortDirection(String sortDirection) {
+        this.sortDirection = sortDirection;
     }
 
     @Override

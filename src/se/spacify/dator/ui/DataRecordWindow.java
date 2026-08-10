@@ -9,6 +9,7 @@ import java.util.Set;
 
 import jexer.TAction;
 import jexer.TComboBox;
+import jexer.TEditorWidget;
 import jexer.TField;
 import jexer.TKeypress;
 import jexer.TWindow;
@@ -26,9 +27,11 @@ import se.spacify.dator.model.DatorTable;
  */
 public class DataRecordWindow extends TWindow {
 
-    /** created/updated/number/deleted are system-managed; not shown on the form. */
+    /** These standard columns are auto-managed; not shown on the form. */
     private static final Set<String> SYSTEM_MANAGED_COLUMNS =
-            Set.of("created", "updated", "number", "deleted");
+            Set.of("created", "updated", "number", "deleted", "uuid", "slug");
+
+    private static final int EDITOR_HEIGHT = 5;
 
     private final DatorApplication app;
     private final DatorTable table;
@@ -41,6 +44,7 @@ public class DataRecordWindow extends TWindow {
     private final Map<String, DatorRelation> relationByColumnName = new LinkedHashMap<>();
 
     private final Map<String, TField> fields = new LinkedHashMap<>();
+    private final Map<String, TEditorWidget> editors = new LinkedHashMap<>();
     private final Map<String, TComboBox> combos = new LinkedHashMap<>();
     private final Map<String, List<Object>> comboValues = new LinkedHashMap<>();
     private final List<DatorColumn> blobColumns = new ArrayList<>();
@@ -48,7 +52,7 @@ public class DataRecordWindow extends TWindow {
     public DataRecordWindow(DatorApplication app, DatorTable table, List<DatorColumn> columns,
             Map<String, Object> existingRow, TAction onSaved) {
         super(app, (existingRow == null ? "New Row: " : "Edit Row: ") + table.getDisplayLabel(),
-                74, Math.min(30, 8 + Math.max(1, columns.size()) + 3), TWindow.MODAL);
+                74, computeHeight(columns), TWindow.MODAL);
         this.app = app;
         this.table = table;
         this.columns = columns;
@@ -59,6 +63,22 @@ public class DataRecordWindow extends TWindow {
 
         loadRelations();
         setupWidgets();
+    }
+
+    private static int computeHeight(List<DatorColumn> columns) {
+        int rows = 0;
+        int extra = 0;
+        for (DatorColumn c : columns) {
+            if (SYSTEM_MANAGED_COLUMNS.contains(c.getName().toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+            if ("LONGTEXT".equalsIgnoreCase(c.getDataType())) {
+                extra += EDITOR_HEIGHT;
+            } else {
+                rows++;
+            }
+        }
+        return Math.min(40, 8 + Math.max(1, rows) + extra + 3);
     }
 
     private DatorColumn findAutoIncrementPk(List<DatorColumn> cols) {
@@ -93,9 +113,6 @@ public class DataRecordWindow extends TWindow {
     private void setupWidgets() {
         int y = 1;
         for (DatorColumn c : columns) {
-            if (isNew && autoPkColumn != null && c.getId() == autoPkColumn.getId()) {
-                continue;
-            }
             if (SYSTEM_MANAGED_COLUMNS.contains(c.getName().toLowerCase(Locale.ROOT))) {
                 continue;
             }
@@ -110,16 +127,24 @@ public class DataRecordWindow extends TWindow {
             addLabel(labelFor(c), 2, y);
             if (rel != null) {
                 buildFkCombo(c, rel, y);
+                y++;
+            } else if ("LONGTEXT".equalsIgnoreCase(c.getDataType())) {
+                Object currentVal = existingRow == null ? null : existingRow.get(c.getName());
+                String text = currentVal == null ? "" : currentVal.toString();
+                TEditorWidget editor = addEditor(text, 26, y, getWidth() - 30, EDITOR_HEIGHT);
+                editors.put(c.getName(), editor);
+                y += EDITOR_HEIGHT;
             } else {
                 Object currentVal = existingRow == null ? null : existingRow.get(c.getName());
                 String text = currentVal == null ? "" : currentVal.toString();
                 TField field = addField(26, y, 42, false, text);
-                if (!isNew && autoPkColumn != null && c.getId() == autoPkColumn.getId()) {
+                boolean isAutoPk = autoPkColumn != null && c.getId() == autoPkColumn.getId();
+                if (!isNew && isAutoPk) {
                     field.setEnabled(false);
                 }
                 fields.put(c.getName(), field);
+                y++;
             }
-            y++;
         }
 
         addButton("Save", 2, getHeight() - 3, new TAction() {
@@ -135,6 +160,10 @@ public class DataRecordWindow extends TWindow {
     }
 
     private String labelFor(DatorColumn c) {
+        boolean isAutoPk = autoPkColumn != null && c.getId() == autoPkColumn.getId();
+        if (isAutoPk && isNew) {
+            return c.getDisplayLabel() + " (PK, optional - auto if blank):";
+        }
         String suffix = c.isPk() ? " (PK)" : (!c.isNullable() ? " *" : "");
         return c.getDisplayLabel() + suffix + ":";
     }
@@ -157,7 +186,7 @@ public class DataRecordWindow extends TWindow {
                         }
                     }
                 }
-                DatorColumn displayColumn = pickDisplayColumn(refColumns, refValueColumn);
+                DatorColumn displayColumn = GridUtil.pickDisplayColumn(refColumns, refValueColumn);
                 List<Map<String, Object>> refRows = app.getDataRepository().listRows(refTable, refColumns);
                 for (Map<String, Object> row : refRows) {
                     Object value = refValueColumn != null
@@ -194,24 +223,18 @@ public class DataRecordWindow extends TWindow {
         comboValues.put(fkCol.getName(), values);
     }
 
-    private DatorColumn pickDisplayColumn(List<DatorColumn> refColumns, DatorColumn refValueColumn) {
-        for (DatorColumn c : refColumns) {
-            if ("TEXT".equalsIgnoreCase(c.getDataType())
-                    && (refValueColumn == null || c.getId() != refValueColumn.getId())) {
-                return c;
-            }
-        }
-        return refValueColumn;
-    }
-
     private void doSave() {
         Map<String, Object> values = new LinkedHashMap<>();
 
         for (DatorColumn c : columns) {
-            if (autoPkColumn != null && c.getId() == autoPkColumn.getId()) {
-                continue;
+            boolean isAutoPk = autoPkColumn != null && c.getId() == autoPkColumn.getId();
+            if (isAutoPk && !isNew) {
+                continue; // never modify the PK of an existing row
             }
             if (blobColumns.contains(c)) {
+                continue;
+            }
+            if (SYSTEM_MANAGED_COLUMNS.contains(c.getName().toLowerCase(Locale.ROOT))) {
                 continue;
             }
 
@@ -234,12 +257,29 @@ public class DataRecordWindow extends TWindow {
                 continue;
             }
 
+            if (editors.containsKey(c.getName())) {
+                String text = editors.get(c.getName()).getText().trim();
+                if (text.isEmpty()) {
+                    if (!c.isNullable()) {
+                        app.messageBox("Validation Error", labelFor(c) + " is required.");
+                        return;
+                    }
+                    values.put(c.getName(), null);
+                } else {
+                    values.put(c.getName(), text);
+                }
+                continue;
+            }
+
             TField field = fields.get(c.getName());
             if (field == null) {
                 continue;
             }
             String text = field.getText().trim();
             if (text.isEmpty()) {
+                if (isAutoPk) {
+                    continue; // blank id on create -> let AUTOINCREMENT assign one
+                }
                 if (!c.isNullable()) {
                     app.messageBox("Validation Error", labelFor(c) + " is required.");
                     return;
