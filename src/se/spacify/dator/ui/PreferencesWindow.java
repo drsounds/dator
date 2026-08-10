@@ -3,6 +3,7 @@ package se.spacify.dator.ui;
 import java.util.List;
 
 import jexer.TAction;
+import jexer.TCheckBox;
 import jexer.TComboBox;
 import jexer.TKeypress;
 import jexer.TWindow;
@@ -10,7 +11,8 @@ import jexer.event.TKeypressEvent;
 
 /**
  * Lets the user switch between the ISPF theme and Jexer's built-in default
- * theme, and customize the ISPF theme's foreground/background colors.
+ * theme, customize the ISPF theme's foreground/background colors, and turn
+ * off window shadows/transparency/desktop pattern for a flat mainframe look.
  */
 public class PreferencesWindow extends TWindow {
 
@@ -22,9 +24,10 @@ public class PreferencesWindow extends TWindow {
     private TComboBox themeCombo;
     private TComboBox fgCombo;
     private TComboBox bgCombo;
+    private TCheckBox flatUiCheckBox;
 
     public PreferencesWindow(DatorApplication app) {
-        super(app, "Preferences", 60, 17, TWindow.MODAL);
+        super(app, "Preferences", 60, 19, TWindow.MODAL);
         this.app = app;
         setupWidgets();
     }
@@ -45,6 +48,9 @@ public class PreferencesWindow extends TWindow {
         bgCombo = addComboBox(2, 8, 20, ColorNames.NAMES, bgIndex, 8, null);
 
         addLabel("(colors above only apply to the ISPF theme)", 2, 10);
+
+        flatUiCheckBox = addCheckBox(2, 12,
+                "Flat mainframe look (no shadows, transparency, or desktop pattern)", prefs.flatUi);
 
         addButton("Apply", 2, getHeight() - 3, new TAction() {
             public void DO() {
@@ -74,7 +80,9 @@ public class PreferencesWindow extends TWindow {
                 ? PreferencesStore.THEME_DEFAULT : PreferencesStore.THEME_ISPF;
         prefs.ispfForeground = fgCombo.getText();
         prefs.ispfBackground = bgCombo.getText();
+        prefs.flatUi = flatUiCheckBox.isChecked();
         app.applyTheme();
+        app.applyEffects();
 
         if (persist) {
             prefs.save();

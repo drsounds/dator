@@ -21,6 +21,8 @@ class PreferencesStore {
     String theme = THEME_ISPF;
     String ispfForeground = "GREEN";
     String ispfBackground = "BLACK";
+    /** Flat mainframe look: no window shadows, no transparency, no desktop hatch pattern. */
+    boolean flatUi = true;
 
     private static File file() {
         String home = System.getProperty("user.home", ".");
@@ -37,6 +39,7 @@ class PreferencesStore {
                 p.theme = props.getProperty("theme", p.theme);
                 p.ispfForeground = props.getProperty("ispf.foreground", p.ispfForeground);
                 p.ispfBackground = props.getProperty("ispf.background", p.ispfBackground);
+                p.flatUi = Boolean.parseBoolean(props.getProperty("flatUi", String.valueOf(p.flatUi)));
             } catch (IOException ignored) {
                 // fall back to defaults
             }
@@ -54,6 +57,7 @@ class PreferencesStore {
         props.setProperty("theme", theme);
         props.setProperty("ispf.foreground", ispfForeground);
         props.setProperty("ispf.background", ispfBackground);
+        props.setProperty("flatUi", String.valueOf(flatUi));
         try (OutputStream out = new FileOutputStream(f)) {
             props.store(out, "Dator preferences");
         } catch (IOException ignored) {

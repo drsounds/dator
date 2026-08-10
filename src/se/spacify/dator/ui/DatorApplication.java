@@ -36,6 +36,7 @@ public class DatorApplication extends TApplication {
         super(BackendType.SWING);
         preferences = PreferencesStore.load();
         applyTheme();
+        applyEffects();
         openDatabase(dbPath);
         buildMenu();
         tableListWindow = new TableListWindow(this);
@@ -53,6 +54,17 @@ public class DatorApplication extends TApplication {
             IspfTheme.apply(getTheme(), ColorNames.colorOf(preferences.ispfForeground),
                     ColorNames.colorOf(preferences.ispfBackground));
         }
+        doRepaint();
+    }
+
+    /**
+     * Applies the flat-UI preference: no window shadows, no translucent
+     * windows, and no hatch-patterned desktop background - just flat color
+     * fills, like a real mainframe terminal.
+     */
+    void applyEffects() {
+        setTranslucence(!preferences.flatUi);
+        setDesktop(preferences.flatUi ? null : new jexer.TDesktop(this));
         doRepaint();
     }
 
