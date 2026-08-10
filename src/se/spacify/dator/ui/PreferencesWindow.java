@@ -10,15 +10,16 @@ import jexer.TWindow;
 import jexer.event.TKeypressEvent;
 
 /**
- * Lets the user switch between the ISPF theme and Jexer's built-in default
- * theme, customize the ISPF theme's foreground/background colors, and turn
- * off window shadows/transparency/desktop pattern for a flat mainframe look.
+ * Lets the user switch between the MS-DOS, ISPF, and Jexer default themes,
+ * customize the ISPF theme's foreground/background colors, and turn off
+ * window shadows/transparency/desktop pattern for a flat mainframe look.
  */
 public class PreferencesWindow extends TWindow {
 
+    private static final String DOS_OPTION = "MS-DOS (grey/blue)";
     private static final String ISPF_OPTION = "ISPF (green screen)";
     private static final String DEFAULT_OPTION = "Jexer Default";
-    private static final List<String> THEME_OPTIONS = List.of(ISPF_OPTION, DEFAULT_OPTION);
+    private static final List<String> THEME_OPTIONS = List.of(DOS_OPTION, ISPF_OPTION, DEFAULT_OPTION);
 
     private final DatorApplication app;
     private TComboBox themeCombo;
@@ -36,8 +37,15 @@ public class PreferencesWindow extends TWindow {
         PreferencesStore prefs = app.getPreferences();
 
         addLabel("Theme", 2, 1);
-        int themeIndex = PreferencesStore.THEME_DEFAULT.equals(prefs.theme) ? 1 : 0;
-        themeCombo = addComboBox(2, 2, 26, THEME_OPTIONS, themeIndex, 3, null);
+        int themeIndex;
+        if (PreferencesStore.THEME_DEFAULT.equals(prefs.theme)) {
+            themeIndex = 2;
+        } else if (PreferencesStore.THEME_ISPF.equals(prefs.theme)) {
+            themeIndex = 1;
+        } else {
+            themeIndex = 0;
+        }
+        themeCombo = addComboBox(2, 2, 26, THEME_OPTIONS, themeIndex, 4, null);
 
         addLabel("ISPF foreground color", 2, 4);
         int fgIndex = Math.max(0, ColorNames.NAMES.indexOf(prefs.ispfForeground.toUpperCase(java.util.Locale.ROOT)));
@@ -76,8 +84,14 @@ public class PreferencesWindow extends TWindow {
         }
 
         PreferencesStore prefs = app.getPreferences();
-        prefs.theme = DEFAULT_OPTION.equals(themeCombo.getText())
-                ? PreferencesStore.THEME_DEFAULT : PreferencesStore.THEME_ISPF;
+        String chosenTheme = themeCombo.getText();
+        if (DEFAULT_OPTION.equals(chosenTheme)) {
+            prefs.theme = PreferencesStore.THEME_DEFAULT;
+        } else if (ISPF_OPTION.equals(chosenTheme)) {
+            prefs.theme = PreferencesStore.THEME_ISPF;
+        } else {
+            prefs.theme = PreferencesStore.THEME_DOS;
+        }
         prefs.ispfForeground = fgCombo.getText();
         prefs.ispfBackground = bgCombo.getText();
         prefs.flatUi = flatUiCheckBox.isChecked();

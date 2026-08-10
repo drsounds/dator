@@ -16,9 +16,10 @@ import java.util.Properties;
 class PreferencesStore {
 
     static final String THEME_ISPF = "ispf";
+    static final String THEME_DOS = "dos";
     static final String THEME_DEFAULT = "default";
 
-    String theme = THEME_ISPF;
+    String theme = THEME_DOS;
     String ispfForeground = "GREEN";
     String ispfBackground = "BLACK";
     /** Flat mainframe look: no window shadows, no transparency, no desktop hatch pattern. */
