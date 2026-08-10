@@ -188,7 +188,7 @@ public class DataRowView extends TWindow {
     private int buildFieldGrid(int x, int y, int width) {
         int rowCount = Math.max(columns.size(), 1);
         int height = Math.min(rowCount, FIELD_GRID_MAX_ROWS) + 2;
-        TTableWidget grid = new TTableWidget(this, x, y, width, height, 2, rowCount);
+        TTableWidget grid = new TabbableTable(this, x, y, width, height, 2, rowCount);
         grid.setColumnLabel(0, "Field");
         grid.setColumnLabel(1, "Value");
         grid.setColumnWidth(0, 22);
@@ -256,7 +256,7 @@ public class DataRowView extends TWindow {
                     ? Math.max(3, getHeight() - y - 4 - (hasBottomSummary ? 4 : 0))
                     : Math.min(rowCount, CHILD_GRID_MAX_ROWS) + 2;
 
-            TTableWidget grid = new TTableWidget(this, x, y, width, height, colCount, rowCount);
+            TTableWidget grid = new TabbableTable(this, x, y, width, height, colCount, rowCount);
             if (childColumns.isEmpty()) {
                 grid.setColumnLabel(0, "(no columns)");
             } else {

@@ -152,7 +152,7 @@ public class TableModelEditWindow extends TWindow {
         if (grid != null) {
             grid.remove();
         }
-        grid = new TTableWidget(this, 2, 6, getWidth() - 4, getHeight() - 12, 6, rows.size());
+        grid = new TabbableTable(this, 2, 6, getWidth() - 4, getHeight() - 12, 6, rows.size());
         grid.setColumnLabel(COL_NAME, "Name");
         grid.setColumnLabel(COL_TYPE, "Type");
         grid.setColumnLabel(COL_PK, "PK");

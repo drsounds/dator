@@ -80,6 +80,9 @@ final class GridUtil {
             grid.setCellText(i, 0, cellText[i] == null ? "" : cellText[i]);
             grid.setColumnReadOnly(i, true);
         }
+        // Display-only: keep it out of Tab order entirely rather than
+        // making it a dead end you have to tab past uselessly.
+        grid.setEnabled(false);
         return grid;
     }
 }

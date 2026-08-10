@@ -113,7 +113,7 @@ public class DataListWindow extends TWindow {
 
         int colCount = Math.max(columns.size(), 1);
         int rowCount = Math.max(data.size(), 1);
-        grid = new TTableWidget(this, 1, gridY, width, gridHeight, colCount, rowCount);
+        grid = new TabbableTable(this, 1, gridY, width, gridHeight, colCount, rowCount);
 
         if (columns.isEmpty()) {
             grid.setColumnLabel(0, "(no columns)");

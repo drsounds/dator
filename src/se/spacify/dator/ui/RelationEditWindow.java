@@ -228,7 +228,7 @@ public class RelationEditWindow extends TWindow {
             grid.remove();
         }
         int rowCount = Math.max(relations.size(), 1);
-        grid = new TTableWidget(this, 2, 9, getWidth() - 4, getHeight() - 15, 6, rowCount);
+        grid = new TabbableTable(this, 2, 9, getWidth() - 4, getHeight() - 15, 6, rowCount);
         grid.setColumnLabel(0, "Column");
         grid.setColumnLabel(1, "-> Table");
         grid.setColumnLabel(2, "-> Column");

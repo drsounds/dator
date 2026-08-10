@@ -83,7 +83,7 @@ public class TableListWindow extends TWindow {
         }
 
         int rowCount = Math.max(tables.size(), 1);
-        grid = new TTableWidget(this, 1, 3, getWidth() - 4, getHeight() - 8, 5, rowCount);
+        grid = new TabbableTable(this, 1, 3, getWidth() - 4, getHeight() - 8, 5, rowCount);
         grid.setColumnLabel(0, "Name");
         grid.setColumnLabel(1, "Label");
         grid.setColumnLabel(2, "Columns");

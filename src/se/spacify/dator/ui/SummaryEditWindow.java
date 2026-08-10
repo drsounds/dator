@@ -144,7 +144,7 @@ public class SummaryEditWindow extends TWindow {
             grid.remove();
         }
         int rowCount = Math.max(summaries.size(), 1);
-        grid = new TTableWidget(this, 2, 6, getWidth() - 4, getHeight() - 12, 4, rowCount);
+        grid = new TabbableTable(this, 2, 6, getWidth() - 4, getHeight() - 12, 4, rowCount);
         grid.setColumnLabel(0, "Column");
         grid.setColumnLabel(1, "Aggregate");
         grid.setColumnLabel(2, "Position");
