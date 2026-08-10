@@ -23,19 +23,37 @@ public class DatorApplication extends TApplication {
     private static final int MID_TABLE_LIST = 2010;
     private static final int MID_NEW_TABLE = 2011;
     private static final int MID_ABOUT = 2020;
+    private static final int MID_PREFERENCES = 2030;
 
     private Database database;
     private MetaRepository metaRepository;
     private DataRepository dataRepository;
+    private PreferencesStore preferences;
 
     private TableListWindow tableListWindow;
 
     public DatorApplication(String dbPath) throws UnsupportedEncodingException, SQLException {
         super(BackendType.SWING);
-        IspfTheme.apply(getTheme());
+        preferences = PreferencesStore.load();
+        applyTheme();
         openDatabase(dbPath);
         buildMenu();
         tableListWindow = new TableListWindow(this);
+    }
+
+    PreferencesStore getPreferences() {
+        return preferences;
+    }
+
+    /** Re-applies the current theme choice/colors to the live ColorTheme and repaints. */
+    void applyTheme() {
+        if (PreferencesStore.THEME_DEFAULT.equals(preferences.theme)) {
+            getTheme().setDefaultTheme();
+        } else {
+            IspfTheme.apply(getTheme(), ColorNames.colorOf(preferences.ispfForeground),
+                    ColorNames.colorOf(preferences.ispfBackground));
+        }
+        doRepaint();
     }
 
     private void openDatabase(String path) throws SQLException {
@@ -76,6 +94,9 @@ public class DatorApplication extends TApplication {
 
         addWindowMenu();
 
+        TMenu prefsMenu = addMenu("&Preferences");
+        prefsMenu.addItem(MID_PREFERENCES, "&Theme...");
+
         TMenu helpMenu = addMenu("&Help");
         helpMenu.addItem(MID_ABOUT, "&About");
     }
@@ -96,6 +117,9 @@ public class DatorApplication extends TApplication {
             } else if (id == MID_NEW_TABLE) {
                 showTableList();
                 new TableModelEditWindow(this, null);
+                return true;
+            } else if (id == MID_PREFERENCES) {
+                new PreferencesWindow(this);
                 return true;
             } else if (id == MID_ABOUT) {
                 messageBox("About Dator",

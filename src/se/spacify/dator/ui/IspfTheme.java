@@ -6,11 +6,15 @@ import jexer.bits.ColorTheme;
 
 /**
  * Overrides Jexer's default color theme with an ISPF/3270-style look:
- * green text on a black background everywhere, with a reverse-video
- * (black-on-green) highlight for whatever is focused/active/selected,
- * exactly like a green-screen terminal.
+ * a single foreground color on a single background color everywhere
+ * (green-on-black by default), with a reverse-video highlight for
+ * whatever is focused/active/selected, exactly like a green-screen
+ * terminal. Both colors are customizable (see PreferencesWindow).
  */
 final class IspfTheme {
+
+    static final Color DEFAULT_FOREGROUND = Color.GREEN;
+    static final Color DEFAULT_BACKGROUND = Color.BLACK;
 
     private IspfTheme() {
     }
@@ -24,9 +28,13 @@ final class IspfTheme {
     }
 
     static void apply(ColorTheme theme) {
-        CellAttributes normal = attr(Color.GREEN, Color.BLACK, false);
-        CellAttributes bright = attr(Color.GREEN, Color.BLACK, true);
-        CellAttributes highlight = attr(Color.BLACK, Color.GREEN, true);
+        apply(theme, DEFAULT_FOREGROUND, DEFAULT_BACKGROUND);
+    }
+
+    static void apply(ColorTheme theme, Color fg, Color bg) {
+        CellAttributes normal = attr(fg, bg, false);
+        CellAttributes bright = attr(fg, bg, true);
+        CellAttributes highlight = attr(bg, fg, true);
 
         String[] normalKeys = {
                 "twindow.border.inactive", "twindow.background.inactive",
