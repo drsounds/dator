@@ -10,6 +10,7 @@ import jexer.TAction;
 import jexer.TButton;
 import jexer.TKeypress;
 import jexer.TLabel;
+import jexer.TMessageBox;
 import jexer.TTableWidget;
 import jexer.TWidget;
 import jexer.TWindow;
@@ -50,6 +51,9 @@ public class DataRowView extends TWindow {
     private final List<TWidget> contentWidgets = new ArrayList<>();
     private final Map<TTableWidget, List<Map<String, Object>>> gridChildRows = new HashMap<>();
     private final Map<TTableWidget, DatorTable> gridChildTable = new HashMap<>();
+    private final Map<TTableWidget, List<DatorColumn>> gridChildColumns = new HashMap<>();
+    private final Map<TTableWidget, DatorRelation> gridChildRelation = new HashMap<>();
+    private final Map<TTableWidget, Object> gridChildMatchValue = new HashMap<>();
     private TTableWidget fieldGrid;
     private final Map<Integer, GridUtil.FkInfo> fieldGridFk = new HashMap<>();
 
@@ -176,6 +180,9 @@ public class DataRowView extends TWindow {
         contentWidgets.clear();
         gridChildRows.clear();
         gridChildTable.clear();
+        gridChildColumns.clear();
+        gridChildRelation.clear();
+        gridChildMatchValue.clear();
         fieldGrid = null;
         fieldGridFk.clear();
 
@@ -253,7 +260,8 @@ public class DataRowView extends TWindow {
 
             String label = (rel.getLabel() != null && !rel.getLabel().isEmpty())
                     ? rel.getLabel() : childTable.getDisplayLabel();
-            TLabel sectionLabel = addLabel(label + " (" + filtered.size() + ")  [Enter=view row]", x, y);
+            TLabel sectionLabel = addLabel(
+                    label + " (" + filtered.size() + ")  [Ins=new F4=edit Del=delete Enter=view]", x, y);
             contentWidgets.add(sectionLabel);
             y += 1;
 
@@ -308,6 +316,9 @@ public class DataRowView extends TWindow {
             contentWidgets.add(grid);
             gridChildRows.put(grid, filtered);
             gridChildTable.put(grid, childTable);
+            gridChildColumns.put(grid, childColumns);
+            gridChildRelation.put(grid, rel);
+            gridChildMatchValue.put(grid, matchValue);
             if (fillRemaining) {
                 activate(grid);
             }
@@ -443,21 +454,112 @@ public class DataRowView extends TWindow {
         new DataRowView(app, childTable, ((Number) ridObj).longValue());
     }
 
+    private Long selectedChildRowid(TTableWidget grid) {
+        List<Map<String, Object>> rows = gridChildRows.get(grid);
+        if (rows == null || rows.isEmpty()) {
+            return null;
+        }
+        int idx = grid.getSelectedRowNumber();
+        if (idx < 0 || idx >= rows.size()) {
+            return null;
+        }
+        Object ridObj = rows.get(idx).get(DataRepository.ROWID);
+        return ridObj == null ? null : ((Number) ridObj).longValue();
+    }
+
+    private void newChildRow(TTableWidget grid) {
+        DatorTable childTable = gridChildTable.get(grid);
+        List<DatorColumn> childColumns = gridChildColumns.get(grid);
+        DatorRelation rel = gridChildRelation.get(grid);
+        if (childTable == null || childColumns == null || rel == null) {
+            return;
+        }
+        DatorColumn fkColumn = findColumnById(childColumns, rel.getColumnId());
+        Object matchValue = gridChildMatchValue.get(grid);
+        Map<String, Object> preset = new HashMap<>();
+        if (fkColumn != null && matchValue != null) {
+            preset.put(fkColumn.getName(), matchValue);
+        }
+        new DataRecordWindow(app, childTable, childColumns, null, preset, new TAction() {
+            public void DO() {
+                reload();
+            }
+        });
+    }
+
+    private void editChildRow(TTableWidget grid) {
+        DatorTable childTable = gridChildTable.get(grid);
+        List<DatorColumn> childColumns = gridChildColumns.get(grid);
+        Long childRowid = selectedChildRowid(grid);
+        if (childTable == null || childColumns == null || childRowid == null) {
+            return;
+        }
+        try {
+            Map<String, Object> fullRow = app.getDataRepository().getRow(childTable, childColumns, childRowid);
+            if (fullRow == null) {
+                reload();
+                return;
+            }
+            new DataRecordWindow(app, childTable, childColumns, fullRow, new TAction() {
+                public void DO() {
+                    reload();
+                }
+            });
+        } catch (Exception e) {
+            app.showError(e);
+        }
+    }
+
+    private void deleteChildRow(TTableWidget grid) {
+        DatorTable childTable = gridChildTable.get(grid);
+        List<DatorColumn> childColumns = gridChildColumns.get(grid);
+        Long childRowid = selectedChildRowid(grid);
+        if (childTable == null || childColumns == null || childRowid == null) {
+            return;
+        }
+        TMessageBox result = app.messageBox("Delete Row", "Delete this row?", TMessageBox.Type.YESNO);
+        if (!result.isYes()) {
+            return;
+        }
+        try {
+            app.getDataRepository().deleteRow(childTable, childColumns, childRowid);
+            reload();
+        } catch (Exception e) {
+            app.showError(e);
+        }
+    }
+
     @Override
     public void onKeypress(TKeypressEvent event) {
         TKeypress key = event.getKey();
+        TWidget active = getActiveChild();
+        boolean onChildGrid = active instanceof TTableWidget && gridChildRows.containsKey(active);
+
         if (key.equals(TKeypress.kbEsc)) {
             close();
             return;
+        } else if (key.equals(TKeypress.kbIns)) {
+            if (onChildGrid) {
+                newChildRow((TTableWidget) active);
+                return;
+            }
         } else if (key.equals(TKeypress.kbF4)) {
-            editRow();
+            if (onChildGrid) {
+                editChildRow((TTableWidget) active);
+            } else {
+                editRow();
+            }
             return;
+        } else if (key.equals(TKeypress.kbDel)) {
+            if (onChildGrid) {
+                deleteChildRow((TTableWidget) active);
+                return;
+            }
         } else if (key.equals(TKeypress.kbF5)) {
             reload();
             return;
         } else if (key.equals(TKeypress.kbEnter)) {
-            TWidget active = getActiveChild();
-            if (active instanceof TTableWidget && gridChildRows.containsKey(active)) {
+            if (onChildGrid) {
                 drillDown((TTableWidget) active);
                 return;
             }

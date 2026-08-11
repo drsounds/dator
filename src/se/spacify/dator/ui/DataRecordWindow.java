@@ -37,6 +37,7 @@ public class DataRecordWindow extends TWindow {
     private final DatorTable table;
     private final List<DatorColumn> columns;
     private final Map<String, Object> existingRow;
+    private final Map<String, Object> presetValues;
     private final boolean isNew;
     private final TAction onSaved;
 
@@ -51,18 +52,36 @@ public class DataRecordWindow extends TWindow {
 
     public DataRecordWindow(DatorApplication app, DatorTable table, List<DatorColumn> columns,
             Map<String, Object> existingRow, TAction onSaved) {
+        this(app, table, columns, existingRow, null, onSaved);
+    }
+
+    /**
+     * @param presetValues only consulted when creating a new row (existingRow
+     *     is null): pre-fills/pre-selects the given columns' fields, e.g. a
+     *     belongs-to column pointing back at whatever row you drilled in from.
+     */
+    public DataRecordWindow(DatorApplication app, DatorTable table, List<DatorColumn> columns,
+            Map<String, Object> existingRow, Map<String, Object> presetValues, TAction onSaved) {
         super(app, (existingRow == null ? "New Row: " : "Edit Row: ") + table.getDisplayLabel(),
                 74, computeHeight(columns), TWindow.MODAL);
         this.app = app;
         this.table = table;
         this.columns = columns;
         this.existingRow = existingRow;
+        this.presetValues = presetValues;
         this.isNew = (existingRow == null);
         this.onSaved = onSaved;
         this.autoPkColumn = findAutoIncrementPk(columns);
 
         loadRelations();
         setupWidgets();
+    }
+
+    private Object initialValueFor(String columnName) {
+        if (existingRow != null) {
+            return existingRow.get(columnName);
+        }
+        return presetValues == null ? null : presetValues.get(columnName);
     }
 
     private static int computeHeight(List<DatorColumn> columns) {
@@ -129,13 +148,13 @@ public class DataRecordWindow extends TWindow {
                 buildFkCombo(c, rel, y);
                 y++;
             } else if ("LONGTEXT".equalsIgnoreCase(c.getDataType())) {
-                Object currentVal = existingRow == null ? null : existingRow.get(c.getName());
+                Object currentVal = initialValueFor(c.getName());
                 String text = currentVal == null ? "" : currentVal.toString();
                 TEditorWidget editor = addEditor(text, 26, y, getWidth() - 30, EDITOR_HEIGHT);
                 editors.put(c.getName(), editor);
                 y += EDITOR_HEIGHT;
             } else {
-                Object currentVal = existingRow == null ? null : existingRow.get(c.getName());
+                Object currentVal = initialValueFor(c.getName());
                 String text = currentVal == null ? "" : currentVal.toString();
                 TField field = addField(26, y, 42, false, text);
                 boolean isAutoPk = autoPkColumn != null && c.getId() == autoPkColumn.getId();
@@ -172,7 +191,7 @@ public class DataRecordWindow extends TWindow {
         List<String> labels = new ArrayList<>();
         List<Object> values = new ArrayList<>();
         int selectedIndex = -1;
-        Object currentVal = existingRow == null ? null : existingRow.get(fkCol.getName());
+        Object currentVal = initialValueFor(fkCol.getName());
 
         try {
             DatorTable refTable = app.getMetaRepository().getTable(rel.getRefTableId());
