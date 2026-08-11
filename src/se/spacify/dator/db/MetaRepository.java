@@ -34,6 +34,7 @@ public class MetaRepository {
 
     private static final Set<String> RESERVED_NAMES = new HashSet<>(List.of(
             "dator_tables", "dator_table_columns", "dator_table_relations",
+            "dator_apps", "dator_features",
             "sqlite_master", "sqlite_sequence"));
 
     private final Database db;
