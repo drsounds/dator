@@ -32,8 +32,14 @@ public class DatorApplication extends TApplication {
 
     private TableListWindow tableListWindow;
 
+    /** Runs directly in the calling terminal (real ANSI rendering, no separate window). */
     public DatorApplication(String dbPath) throws UnsupportedEncodingException, SQLException {
-        super(BackendType.SWING);
+        this(dbPath, BackendType.ECMA48);
+    }
+
+    public DatorApplication(String dbPath, BackendType backendType)
+            throws UnsupportedEncodingException, SQLException {
+        super(backendType);
         preferences = PreferencesStore.load();
         applyTheme();
         applyEffects();
